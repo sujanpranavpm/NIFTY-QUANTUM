@@ -1,0 +1,7 @@
+strategy_id,verdict,checks_passed,checks_failed,checks_untested,critical_failures,failed_checks,untested_checks
+orders_01,unsupported,7,4,0,1,"walkforward_positive, concentration, statistical_significance, fdr_significant",
+orders_05,unsupported,6,5,0,2,"oos_profitable, oos_retention, concentration, statistical_significance, fdr_significant",
+orders_09,unsupported,3,7,1,3,"oos_profitable, walkforward_positive, breadth, sensitivity_plateau, statistical_significance, fdr_significant, regime_coverage",concentration
+orders_12,unsupported,4,6,1,2,"oos_retention, walkforward_positive, breadth, sensitivity_plateau, statistical_significance, fdr_significant",concentration
+orders_17,unsupported,3,3,5,2,"enough_trades, fdr_significant, regime_coverage","walkforward_positive, breadth, concentration, sensitivity_plateau, oos_restart_agrees"
+orders_18,unsupported,7,4,0,1,"walkforward_positive, concentration, statistical_significance, fdr_significant",

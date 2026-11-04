@@ -1,0 +1,64 @@
+# ---- Python noise -------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# ---- Secrets and local credentials (never commit) -----------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.toml
+config_local.py
+*_token.json
+*_api_apikey*
+
+# ---- Bulk / regenerable data --------------------------------------------
+# Raw and cached market data is multi-hundred-MB and re-fetchable: keep it out.
+data/cache/
+data/raw/
+data/options/
+*.parquet
+*.pq
+*.csv.gz
+*.zip
+*.7z
+*.arrow
+*.feather
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Generated reports and logs -----------------------------------------
+reports/
+logs/
+*.log
+
+# ---- Research artefacts --------------------------------------------------
+# Versioned: the canonical smoke run + smoke validation aggregates (small CSVs
+# that the T8 signal tests read, so a fresh clone can run the suite without
+# re-fetching the market). Ignored: run blobs, figure/HTML dumps and every
+# regenerable export bundle.
+artifacts/**
+!artifacts/smoke/
+!artifacts/validation_smoke/
+!artifacts/smoke/*.csv
+!artifacts/smoke/*_metadata.json
+!artifacts/validation_smoke/*.csv
+!artifacts/validation_smoke/*_metadata.json
+artifacts/**/*.parquet
+# Per-trade event logs are run outputs and are re-derivable; keep the repo lean.
+artifacts/smoke/signals.csv
+artifacts/smoke/trades.csv
+artifacts/smoke/monthly_returns.csv
+
+# Vendored upstream reference (cloned, not part of this repo)
+vendor/

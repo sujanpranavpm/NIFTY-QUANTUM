@@ -1,0 +1,67 @@
+strategy_id,check,critical,passed,value,detail
+orders_01,enough_trades,True,True,157.0,minimum 30
+orders_01,oos_profitable,True,True,0.0241014754143369,held-out mean sleeve return
+orders_01,oos_retention,False,True,0.16568617248393636,held-out return / development return
+orders_01,walkforward_positive,False,False,0.4,share of folds with positive OOS return (min 50%)
+orders_01,breadth,True,True,1.0,share of profitable symbols (min 50%)
+orders_01,concentration,False,False,0.8098303149318685,share of total P&L from the single best symbol
+orders_01,sensitivity_plateau,False,True,1.0,median share of profitable perturbations (min 60%)
+orders_01,statistical_significance,False,False,0.941136691283625,probabilistic Sharpe (min 0.95)
+orders_01,fdr_significant,True,False,0.375,Benjamini-Hochberg q for breadth (max 0.1)
+orders_01,regime_coverage,False,True,4.0,regimes with positive P&L (min 2)
+orders_01,oos_restart_agrees,False,True,1.1102230246251565e-16,max |restarted - sliced| held-out return
+orders_05,enough_trades,True,True,497.0,minimum 30
+orders_05,oos_profitable,True,False,-0.01626705581323684,held-out mean sleeve return
+orders_05,oos_retention,False,False,-0.5339239816581264,held-out return / development return
+orders_05,walkforward_positive,False,True,0.5,share of folds with positive OOS return (min 50%)
+orders_05,breadth,True,True,1.0,share of profitable symbols (min 50%)
+orders_05,concentration,False,False,0.48102452863717093,share of total P&L from the single best symbol
+orders_05,sensitivity_plateau,False,True,0.875,median share of profitable perturbations (min 60%)
+orders_05,statistical_significance,False,False,0.588531923716785,probabilistic Sharpe (min 0.95)
+orders_05,fdr_significant,True,False,0.375,Benjamini-Hochberg q for breadth (max 0.1)
+orders_05,regime_coverage,False,True,2.0,regimes with positive P&L (min 2)
+orders_05,oos_restart_agrees,False,True,2.220446049250313e-16,max |restarted - sliced| held-out return
+orders_09,enough_trades,True,True,156.0,minimum 30
+orders_09,oos_profitable,True,False,-0.01361235678538708,held-out mean sleeve return
+orders_09,oos_retention,False,True,0.26253729566843664,held-out return / development return
+orders_09,walkforward_positive,False,False,0.4,share of folds with positive OOS return (min 50%)
+orders_09,breadth,True,False,0.0,share of profitable symbols (min 50%)
+orders_09,concentration,False,,,share of total P&L from the single best symbol
+orders_09,sensitivity_plateau,False,False,0.0,median share of profitable perturbations (min 60%)
+orders_09,statistical_significance,False,False,0.003135798520317995,probabilistic Sharpe (min 0.95)
+orders_09,fdr_significant,True,False,0.375,Benjamini-Hochberg q for breadth (max 0.1)
+orders_09,regime_coverage,False,False,0.0,regimes with positive P&L (min 2)
+orders_09,oos_restart_agrees,False,True,0.0,max |restarted - sliced| held-out return
+orders_12,enough_trades,True,True,157.0,minimum 30
+orders_12,oos_profitable,True,True,0.001786418012853619,held-out mean sleeve return
+orders_12,oos_retention,False,False,-0.04884782837346038,held-out return / development return
+orders_12,walkforward_positive,False,False,0.2,share of folds with positive OOS return (min 50%)
+orders_12,breadth,True,False,0.3333333333333333,share of profitable symbols (min 50%)
+orders_12,concentration,False,,,share of total P&L from the single best symbol
+orders_12,sensitivity_plateau,False,False,0.0,median share of profitable perturbations (min 60%)
+orders_12,statistical_significance,False,False,0.09138148184883421,probabilistic Sharpe (min 0.95)
+orders_12,fdr_significant,True,False,1.0,Benjamini-Hochberg q for breadth (max 0.1)
+orders_12,regime_coverage,False,True,2.0,regimes with positive P&L (min 2)
+orders_12,oos_restart_agrees,False,True,0.0,max |restarted - sliced| held-out return
+orders_17,enough_trades,True,False,0.0,minimum 30
+orders_17,oos_profitable,True,True,0.3278826572527256,held-out mean sleeve return
+orders_17,oos_retention,False,True,0.0592849701333278,held-out return / development return
+orders_17,walkforward_positive,False,,,share of folds with positive OOS return (min 50%)
+orders_17,breadth,True,,,no qualifying symbols
+orders_17,concentration,False,,,no qualifying symbols
+orders_17,sensitivity_plateau,False,,,no testable perturbation
+orders_17,statistical_significance,False,True,0.9990297388248138,probabilistic Sharpe (min 0.95)
+orders_17,fdr_significant,True,False,1.0,Benjamini-Hochberg q for breadth (max 0.1)
+orders_17,regime_coverage,False,False,0.0,regimes with positive P&L (min 2)
+orders_17,oos_restart_agrees,False,,,no comparable sleeve restarted
+orders_18,enough_trades,True,True,157.0,minimum 30
+orders_18,oos_profitable,True,True,0.0241014754143369,held-out mean sleeve return
+orders_18,oos_retention,False,True,0.16568617248393636,held-out return / development return
+orders_18,walkforward_positive,False,False,0.4,share of folds with positive OOS return (min 50%)
+orders_18,breadth,True,True,1.0,share of profitable symbols (min 50%)
+orders_18,concentration,False,False,0.8098303149318685,share of total P&L from the single best symbol
+orders_18,sensitivity_plateau,False,True,1.0,median share of profitable perturbations (min 60%)
+orders_18,statistical_significance,False,False,0.941136691283625,probabilistic Sharpe (min 0.95)
+orders_18,fdr_significant,True,False,0.375,Benjamini-Hochberg q for breadth (max 0.1)
+orders_18,regime_coverage,False,True,4.0,regimes with positive P&L (min 2)
+orders_18,oos_restart_agrees,False,True,1.1102230246251565e-16,max |restarted - sliced| held-out return

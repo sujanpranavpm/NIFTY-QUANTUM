@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-11-03T19:14:40+00:00",
+  "strategies": "orders_01,orders_05,orders_09,orders_12,orders_17,orders_18",
+  "dev_fraction": 0.7,
+  "purge_bars": 25,
+  "fold_count": 14,
+  "sensitivity_symbols": "RELIANCE,TCS,M_M",
+  "thresholds": {
+    "min_trades": 30,
+    "min_oos_retention": 0.0,
+    "min_wf_positive_share": 0.5,
+    "max_symbol_concentration": 0.4,
+    "min_plateau_share": 0.6,
+    "min_psr": 0.95,
+    "min_dsr": 0.95,
+    "fdr_alpha": 0.1
+  }
+}
