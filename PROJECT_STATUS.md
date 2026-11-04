@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-04 (P0 repository audit + P1 data feasibility, complete)
+Last updated: 2026-11-05 (P0 + P1 complete; data-accuracy corrections and T9 complete)
 Verified by direct inspection of the working tree and of the real data files — not from
 prior progress reports or provider marketing pages.
 
@@ -49,27 +49,35 @@ see `DATA_FEASIBILITY_REPORT.md` for the verdict and the field-by-field classifi
 - `export_all(..., signals=...)` writes root and per-strategy `signals.csv`.
 - Tests: `tests/test_signals.py` — 11 tests.
 
-## Test status (recorded 2026-11-04)
+## Test status (recorded 2026-11-05)
 
 ```
 10 passed, 1 skipped in 18.83s   (P0 run 1 — `logs/pytest_baseline.txt`)
 10 passed, 1 skipped in 14.02s   (P0 run 2 — reproducibility confirmed)
 10 passed, 1 skipped in 11.21s   (P1 close-out re-run — tree still green)
+300 passed, 1 skipped in 20.53s  (T9 — `logs/pytest_t9.txt`)
 ```
 
-Invoke it as `python -m pytest tests`. A **bare `pytest` from the repo root is not a valid
-command here**: with no `pytest.ini`/`pyproject.toml`, it also collects
-`vendor/quantjourney-bt/tests/` and aborts with 8 `ModuleNotFoundError: No module named
-'backtester'` collection errors, which looks like a broken repo but is not.
+Invoke it as `pytest` or `python -m pytest tests` from the repo root. Both are verified
+green, and so is `python -m pytest` from inside `tests/`. `pytest.ini` (`testpaths =
+tests`, `norecursedirs = vendor …`) is what makes a bare run safe: without it a bare
+`pytest` also collected `vendor/quantjourney-bt/tests/`, which imports a package
+(`backtester`) that is not installed here, and aborted with 8 `ModuleNotFoundError`
+collection errors. **No file under `vendor/` was modified.**
 
 Skip reason: `test_bracket_stop_target_and_risk_reward` — `orders_12` produced no
 fresh BUY at the end of the 3-symbol smoke sample (it produced an EXIT on TCS), so
 the bracket R/R assertion has nothing to check. Not a failure.
 
-**Coverage gap (real):** `tests/` contains **only** signal-engine tests. There are
-**no** tests for the cost model, fill engine, accounting, indicators, look-ahead
-prevention at engine level, validation statistics, or reporting. This is planned
-task T9 and it is **outstanding**.
+**Coverage (this was the real gap until T9).** The cost model, brokerage and statutory
+charges, slippage, order fills, stop-loss/target execution, order priority, position
+accounting, equity, look-ahead prevention, historical lot mapping, expiry mapping,
+volume and OI conversion, timestamp handling, candle aggregation and the completeness
+vocabulary are now all covered: **290 of the 300 passing tests are new in this milestone**
+(231 for the data-accuracy items, 59 for the cost model and fill engine earlier in the same
+milestone; the P1 baseline had only the 11 T8 signal tests). They run on the deterministic
+fixtures in `tests/conftest.py`, never on the smoke dataset.
+Remaining gap: `nifty_quant/validation/` statistics and `nifty_quant/reporting/` plots.
 
 ## Git status
 
@@ -130,17 +138,39 @@ Findings that bind all later work:
 5. Both optional providers are blocked: Cloud Trader Pro serves a Google sign-in wall
    (zero bytes obtained), ICICI Breeze requires a broker account. Neither is claimed.
 
+## Data-accuracy corrections outcome (measured, 2026-11-05)
+
+Deliverables: `DATA_ACCURACY_CORRECTIONS.md` (the nine-part report), the
+`nifty_quant/derivatives/` normalisation layer (`reference`, `units`, `timestamps`,
+`candles`, `completeness`), `pytest.ini`, `requirements-audit.txt`, 9 re-runnable
+`scripts/_m*.py` with their logs, and the T9 suite (300 tests).
+
+Findings that bind all later work, in one line each:
+
+1. **Provider volume is share-equivalents** = contracts × that row's lot. Exact to the share
+   on the current lot-65 regime; verified over 310 file-days / 263 official dates.
+2. **Provider OI changes scale on 2025-01-01**; the ×100 correction is labelled estimated and
+   lifts post-break agreement with the official EOD figure from 0.00% to 73.60%. Only 67.52%
+   of contract-days are independently verifiable, which caps any OI-based intraday feature.
+3. **Timestamps are open-labelled** (`T` covers `[T, T+1)`), `15:30` is a closing print, and
+   28 of 94 audited blocks are **rejected** rather than guessed.
+4. **Completeness has four causes and they are now counted separately**: 9 provider holes, 1
+   truncated expiry file, 3 truncated file-days, 28,754 missing contract-days, 13,591
+   legitimate no-trade days.
+5. **Reconciliation now covers all 318 free official dates**, not 21 — at no extra cost.
+
 ## Pending tasks
 
 | ID | Task | State |
 |---|---|---|
 | P0 | Repo audit, git, docs, test record | **Done** |
 | P1 | Zero-cost NIFTY options data verification + feasibility report | **Done** — awaiting review |
-| T9 | Real pytest suite: costs, fills, accounting, look-ahead, validation | Outstanding |
+| — | Data-accuracy corrections (volume, OI, terminal candle, completeness) + T9 | **Done** — awaiting review (`DATA_ACCURACY_CORRECTIONS.md`) |
+| P2 | Full options ingestion through `nifty_quant/derivatives/` | **Not authorised** — awaiting review |
 | T10 | Full-universe data fetch + 20-strategy research & validation | Outstanding |
 | T11 | Strategy applicability screening → shortlist ~5 → keep ≤3 | Outstanding |
 | — | FastAPI + DB layer + Streamlit dashboard (old plan t8 remainder) | Not started |
-| — | Options data ingestion, options backtest engine, 1m/5m/15m support | Not started; P1 says **price** research is feasible, OI/depth are not |
+| — | Options backtest engine, 1m/5m/15m support | Not started; the *data* layer exists and is tested, the engine does not |
 
 ## Known limitations (honest list)
 
@@ -152,7 +182,9 @@ Findings that bind all later work:
    a *current* snapshot applied across 2010–2026 history. `run_metadata` records
    `survivorship_bias_exposed`.
 4. **Zero validated strategies** — the research objective is currently unmet.
-5. **Test coverage is thin** — engine and cost code is untested by pytest.
+5. **Test coverage** — closed for the engine and the new derivatives layer in T9 (300
+   tests). `nifty_quant/validation/` statistics and `nifty_quant/reporting/` plots are
+   still untested.
 6. Free-tier intraday history from yfinance is roughly 30–60 days for 5m bars and
    ~7 days for 1m bars (the provider's documented limit — **not re-measured in P1**, and
    NSE index-option chains were never queried through it); that alone cannot support
@@ -163,7 +195,24 @@ Findings that bind all later work:
 8. **Option cost model is missing.** `nifty_quant/engine/costs.py` is an equity
    delivery-cost model; per-lot derivative charges, stamp duty and exchange transaction
    fees for options are not modelled, so no options P&L number is trustworthy yet.
-9. **Terminal-bar convention unresolved (report W3).** Audited files carry 376 minute
-   stamps `09:15 … 15:30` with both endpoints present, while `2022-09-22` ends at 15:29
-   (375 stamps) and 9 of 42 days in `2023-12-28` differ again — so a 1-minute bar cannot be
-   assumed to be labelled at its start without deciding and recording the convention first.
+9. **Terminal-bar convention — resolved, no longer open.** Timestamps are
+   **open-labelled**: a bar stamped `T` covers `[T, T+1)`, and `15:30` is the
+   closing/settlement print, not a candle (close == official `LastPric` for 100% of matched
+   contracts; 0.038× a typical minute's volume; 83.3% single-priced). See
+   `DATA_ACCURACY_CORRECTIONS.md` §3. 12 of 68 audited blocks carry stray labels past
+   15:30 (up to 15:54) and are **rejected by strict validation, never guessed**; 5m/15m
+   candles are produced only from `STRICT_OK` blocks.
+10. **Only 67.52% of contract-days have a verifiable last-bar OI** (within 1% of the
+    official end-of-day figure); 35.37% of bars carry provider OI == 0, and the lot size
+    before 2024-01-02 is inferred from the archive itself with no official arbiter. Any
+    OI-based intraday feature must be restricted to the verified observations.
+11. **The provider archive has holes that are the provider's, not this repo's**: **9** listed
+    NIFTY expiries inside the archive's own span (to 2026-07-02) have no file at all, the
+    `2026-08-04` file stops mid-life on 2026-07-02 (byte size matches the provider's, so the
+    download is not the cause), and 3 file-days are truncated (`2025-09-26` 15:00,
+    `2025-10-21` 14:45, `2021-05-14` 09:15). Worse for planning: **41.89% of official
+    contract-days have no provider minute bar at all**, 20,565 of them on contracts that
+    traded more than 100 contracts — the archive's contract coverage is partial, so a
+    universe must be derived from the archive, not from the exchange's listing.
+    `nifty_quant/derivatives/completeness.py` names each cause separately; nothing is
+    silently skipped. See §5 of `DATA_ACCURACY_CORRECTIONS.md`.

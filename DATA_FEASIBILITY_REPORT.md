@@ -24,6 +24,23 @@ under-covers the exchange's reported daily range from that same date, and no par
 2021-05 → 2023-12 era can be verified at all because the free official archive begins
 2024-01-02. Depth, bid/ask and per-minute trade counts exist in no permitted source.**
 
+> **Superseded and extended by `DATA_ACCURACY_CORRECTIONS.md` (2026-11-05).** This report
+> stays as the P1 record; four of its rows are now closed by a wider measurement, and the
+> newer file is authoritative where they differ:
+> - **W3 (terminal 15:29/15:30 inconsistency)** is **resolved**: labels are open time, a bar
+>   stamped `T` covers `[T, T+1)`, `15:30` is the closing print, and blocks with stray labels
+>   past it are rejected by strict validation instead of guessed.
+> - **Volume units** were assumed share-equivalent here and are now **verified** against
+>   `TtlTradgVol x NewBrdLotQty` on 263 official dates / 310 file-days, with the residual
+>   anomalies explained (`logs/m2_volume_units.txt`).
+> - **The OI break** is now a date-aware conversion in `nifty_quant/derivatives/units.py`
+>   with the x100 branch labelled `estimated`, reconciled on 262 official dates, and a
+>   leakage guard that keeps official end-of-day OI out of intraday decisions.
+> - **Reconciliation scope** widened from 21 cached bhavcopies to all **318** free official
+>   dates (2024-01-02 -> 2026-11-03), which is what the two items above are measured on.
+> The pre-2024 lot sizes, the "1/100 of the exchange's" phrasing and the historical lot
+> schedule are corrected in `PROJECT_STATUS.md` and `PROJECT_HANDOFF.md`.
+
 ---
 
 ## A. Provider comparison

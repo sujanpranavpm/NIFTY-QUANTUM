@@ -1,0 +1,13 @@
+# Audit-only dependencies — NOT required by the research engine or the app.
+#
+# Nothing under `nifty_quant/` imports these (verified by grep). They exist so the
+# data-verification scripts under `scripts/` can be re-run by a reviewer:
+#
+#   curl_cffi - browser-TLS-impersonating HTTP client used by the NSE probes
+#   pypdf     - text extraction from NSE circular PDFs (expiry / lot / tick regimes)
+#
+# Both are free, open-source libraries; neither is a data purchase and neither pulls
+# in a paid service. Install only when re-running the audits:
+#   pip install -r requirements-audit.txt
+curl_cffi>=0.7
+pypdf>=5.0
