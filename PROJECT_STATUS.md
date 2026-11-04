@@ -1,14 +1,16 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-04 (P0 repository audit)
-Verified by direct inspection of the working tree — not from prior progress reports.
+Last updated: 2026-11-04 (P0 repository audit + P1 data feasibility, complete)
+Verified by direct inspection of the working tree and of the real data files — not from
+prior progress reports or provider marketing pages.
 
 ## What this project is
 
 A personal quantitative research laboratory. Current implemented scope is **daily
 NSE cash-equity backtesting of order-based strategies**. The stated end goal is
 **NIFTY index options (CE/PE, weekly + monthly, 1m/5m/15m)**, which is **not yet
-implemented** and is gated on the P1 data-feasibility findings.
+implemented**. P1 has now established what the zero-cost data can and cannot support:
+see `DATA_FEASIBILITY_REPORT.md` for the verdict and the field-by-field classification.
 
 ## Environment (verified)
 
@@ -21,6 +23,9 @@ implemented** and is gated on the P1 data-feasibility findings.
 | Package root | `d:\Downloads\nifty_quantum` |
 | Import path | No installed editable package; scripts need `$env:PYTHONPATH='d:\Downloads\nifty_quantum'` |
 | Console encoding | Set `$env:PYTHONIOENCODING='utf-8'` — strategy notes contain `₹`, which crashes cp1252 stdout |
+| Installed versions (measured) | pandas **3.0.1**, numpy 2.4.3, pyarrow 25.0.1, curl_cffi 0.17.0, pypdf 6.21.4, yfinance 1.7.0 |
+| Not installed | `polars`, `duckdb`, `fastparquet` — any P2 code must use pandas + pyarrow |
+| Requirement drift | `requirements.txt` pins `pandas>=2.2,<3.0` but 3.0.1 is installed and the suite passes on it. Recorded, not silently re-pinned |
 
 ## Implemented and verified
 
@@ -47,9 +52,15 @@ implemented** and is gated on the P1 data-feasibility findings.
 ## Test status (recorded 2026-11-04)
 
 ```
-10 passed, 1 skipped in 18.83s   (run 1)
-10 passed, 1 skipped in 14.02s   (run 2 — reproducibility confirmed)
+10 passed, 1 skipped in 18.83s   (P0 run 1 — `logs/pytest_baseline.txt`)
+10 passed, 1 skipped in 14.02s   (P0 run 2 — reproducibility confirmed)
+10 passed, 1 skipped in 11.21s   (P1 close-out re-run — tree still green)
 ```
+
+Invoke it as `python -m pytest tests`. A **bare `pytest` from the repo root is not a valid
+command here**: with no `pytest.ini`/`pyproject.toml`, it also collects
+`vendor/quantjourney-bt/tests/` and aborts with 8 `ModuleNotFoundError: No module named
+'backtester'` collection errors, which looks like a broken repo but is not.
 
 Skip reason: `test_bracket_stop_target_and_risk_reward` — `orders_12` produced no
 fresh BUY at the end of the 3-symbol smoke sample (it produced an EXIT on TCS), so
@@ -62,11 +73,13 @@ task T9 and it is **outstanding**.
 
 ## Git status
 
-- Initialised in P0; single baseline commit `b0affd5` on `master`.
-- 108 tracked files, ~644 KB.
-- Ignored: `data/cache/`, all `*.parquet`, `logs/`, `reports/`, `vendor/`, and every
-  regenerable export bundle (`artifacts/report_smoke/`, `artifacts/signals_smoke/`,
-  `artifacts/roundtrip/`).
+- Initialised in P0. Commits: `b0affd5` (T1–T8 baseline), `2f39c23` (P0 audit + docs),
+  then the P1 close-out commit — read `git log --oneline` for the current head.
+- Tracked files: 114 at the time of writing, before the P1 artifacts are added.
+- Ignored: `data/cache/`, `data/raw/`, all `*.parquet`, `logs/`, `reports/`, `vendor/`, and
+  every regenerable export bundle (`artifacts/report_smoke/`, `artifacts/signals_smoke/`,
+  `artifacts/roundtrip/`). Verified in P1 with `git check-ignore` — no downloaded provider
+  data and none of the 64 P1 logs are staged.
 - Versioned deliberately: `artifacts/smoke/*.csv` + `artifacts/validation_smoke/*.csv`
   so the T8 suite runs from a fresh clone without re-fetching market data.
 - No secrets or `.env` files exist in the tree; secret patterns are pre-emptively ignored.
@@ -94,17 +107,40 @@ quality gate** (NaN rows in ~21-row frames).
 are almost structurally impossible to satisfy. This must be re-tested on a real
 full-universe run before any strategy is called weak.
 
+## P1 outcome — zero-cost NIFTY options data (measured, 2026-11-04)
+
+Deliverables: `DATA_FEASIBILITY_REPORT.md` (sections A–F, every number traceable to a
+named script under `scripts/_p1_*.py` and a log under `logs/`), `DATA_SOURCE_REGISTER.md`
+(what each source is permitted to be used for), 37 audit scripts, 64 P1 log artifacts.
+
+Findings that bind all later work:
+
+1. **Prices are usable; open interest is not one continuous series.** The Hugging Face
+   1-minute archive covers NIFTY options `2021-05-07 → 2026-07-02` (267 expiry files) and
+   its daily close equals the exchange's `LastPric` on 100% of contracts from 2025-01-30.
+   Contract identity matched the official bhavcopy on **15 of 15** audited days with
+   `hf_only_contracts = 0`.
+2. **Two independent defects both start on exactly 2025-01-01** (so they are a pipeline
+   change, not market behaviour): OI becomes 1/100 of the exchange's units, and the
+   intraday high/low begins to under-cover the exchange's reported daily range
+   (15.7–44.7% of contracts below the official high, vs ≤1.31% in 2024).
+3. **Verification floor is 2024-01-02** — that is the earliest date the free official NSE
+   archive serves. `2021-05 → 2023-12` is single-source and unverifiable at ₹0.
+4. **Depth, bid/ask spread and per-minute trade counts exist in no permitted source.**
+5. Both optional providers are blocked: Cloud Trader Pro serves a Google sign-in wall
+   (zero bytes obtained), ICICI Breeze requires a broker account. Neither is claimed.
+
 ## Pending tasks
 
 | ID | Task | State |
 |---|---|---|
 | P0 | Repo audit, git, docs, test record | **Done** |
-| P1 | Zero-cost NIFTY options data verification + feasibility report | In progress |
+| P1 | Zero-cost NIFTY options data verification + feasibility report | **Done** — awaiting review |
 | T9 | Real pytest suite: costs, fills, accounting, look-ahead, validation | Outstanding |
 | T10 | Full-universe data fetch + 20-strategy research & validation | Outstanding |
 | T11 | Strategy applicability screening → shortlist ~5 → keep ≤3 | Outstanding |
 | — | FastAPI + DB layer + Streamlit dashboard (old plan t8 remainder) | Not started |
-| — | Options data ingestion, options backtest engine, 1m/5m/15m support | Not started, blocked on P1 |
+| — | Options data ingestion, options backtest engine, 1m/5m/15m support | Not started; P1 says **price** research is feasible, OI/depth are not |
 
 ## Known limitations (honest list)
 
@@ -118,4 +154,16 @@ full-universe run before any strategy is called weak.
 4. **Zero validated strategies** — the research objective is currently unmet.
 5. **Test coverage is thin** — engine and cost code is untested by pytest.
 6. Free-tier intraday history from yfinance is roughly 30–60 days for 5m bars and
-   ~7 days for 1m bars; that alone cannot support 2021-onwards 1-minute research.
+   ~7 days for 1m bars (the provider's documented limit — **not re-measured in P1**, and
+   NSE index-option chains were never queried through it); that alone cannot support
+   2021-onwards 1-minute research. P1 confirmed no other permitted provider closes this —
+   the Hugging Face archive is the only one with multi-year 1m option history.
+7. **No 15-minute interval exists at any permitted provider** (Breeze documents
+   `1minute/5minute/30minute/1day` only). 15m must be resampled from 1m.
+8. **Option cost model is missing.** `nifty_quant/engine/costs.py` is an equity
+   delivery-cost model; per-lot derivative charges, stamp duty and exchange transaction
+   fees for options are not modelled, so no options P&L number is trustworthy yet.
+9. **Terminal-bar convention unresolved (report W3).** Audited files carry 376 minute
+   stamps `09:15 … 15:30` with both endpoints present, while `2022-09-22` ends at 15:29
+   (375 stamps) and 9 of 42 days in `2023-12-28` differ again — so a 1-minute bar cannot be
+   assumed to be labelled at its start without deciding and recording the convention first.

@@ -13,3 +13,9 @@ pytest>=8.0
 
 # Optional: PostgreSQL driver for the production result store.
 # pip install "psycopg[binary]"
+
+# P1 data-audit tooling only (not used by the research engine).
+# curl_cffi   - browser-TLS-impersonating HTTP client used by the NSE archive probes
+# pypdf       - text extraction from NSE circular PDFs (expiry/lot/tick regime history)
+curl_cffi>=0.7
+pypdf>=5.0

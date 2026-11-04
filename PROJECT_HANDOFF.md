@@ -1,19 +1,21 @@
 # PROJECT_HANDOFF.md
 
 Handoff notes for continuing this project in a fresh session.
-Written at P0 (2026-11-04). Read `PROJECT_STATUS.md` first — it holds verified facts;
-this file holds the operational knowledge a new session needs to not break things.
+Written at P0 (2026-11-04), refreshed at the P1 close-out (2026-11-04). Read
+`PROJECT_STATUS.md` first — it holds verified facts; this file holds the operational
+knowledge a new session needs to not break things.
 
 ## Resume point
 
-**Completed:** T1–T8 (platform + verdict-gated signal engine), P0 (git baseline + docs).
-**In progress:** P1 — zero-cost NIFTY options data verification.
+**Completed:** T1–T8 (platform + verdict-gated signal engine), P0 (git baseline + docs),
+P1 (zero-cost NIFTY options data verification → `DATA_FEASIBILITY_REPORT.md`).
+**Awaiting:** user review of the P1 report. Nothing beyond P1 is authorised.
 **Not started:** T9 (real test suite), T10 (full-universe research run), T11 (strategy
 selection), dashboard/API/DB, options backtest engine.
 
 The hard gate agreed with the user: **do not build ingestion, options backtesting,
 optimisation, dashboard or broker integration until the P1 feasibility report is
-reviewed.**
+reviewed.** P1 is now written; the gate still stands until the review happens.
 
 ## Non-obvious operational facts
 
@@ -39,6 +41,50 @@ These are not visible from filenames and will cost time to rediscover.
 6. **`vendor/quantjourney-bt` is a git-ignored upstream clone.** It is the reference
    implementation the 20 strategies were ported from. It is not part of this repo
    and is not committed.
+
+## Operational facts added by P1
+
+1. **`logs/` and `data/raw/` are git-ignored and must stay that way.** All 64 P1 log
+   artifacts are the evidence base for the report; a fresh clone will not contain them.
+   If a number in `DATA_FEASIBILITY_REPORT.md` needs re-checking, re-run the named
+   `scripts/_p1_*.py`, do not retype it.
+2. **Two HTTP routes, both measured.** `nsearchives.nseindia.com` static files (bhavcopy
+   ZIP, circular PDFs) answer plain `urllib` with a browser User-Agent — `FAOP68747.pdf`
+   returned 200/181,366 bytes that way (`logs/p1_nse_reachability.txt`). `www.nseindia.com`
+   API pages were fetched with `curl_cffi` (`impersonate="chrome124"` + warm-up GET on the
+   homepage and `/option-chain`), which is the convention this repo follows; **no control
+   test proved a plain client is rejected there**, and the only 403/`Access Denied` observed
+   in P1 was the BSE quote API. Do not repeat an NSE fetch without reading the status code.
+3. **The free official bhavcopy begins 2024-01-02.** Do not attempt 2021–2023 verification
+   against it — it is a 404, not a bug in the code. A `Range: bytes=0-3` request returning
+   `PK` is the cheapest trading-day test (404 = holiday).
+4. **Compare `LastPric`, never `ClsPric`, with an archive close.** `ClsPric` agrees with the
+   daily close on only 3.89–43.04% of contracts and `SttlmPric` is a derived value whose
+   median gap to an option premium is ≈ the whole underlying.
+5. **NIFTY option premiums are on the ₹0.05 tick** despite the published contract-specs slab
+   that would put them on ₹0.10 above index 15,000. Two independent observations beat the
+   rule text; the contradiction is recorded in `DATA_SOURCE_REGISTER.md` §3 and must not be
+   silently re-litigated.
+6. **Lot size is a date lookup, never a constant:** `NewBrdLotQty` was 50 (2024-01→04), 25
+   (from 2024-05), 75 (from 2024-12), 65 (from 2025-11). Volume in the HF archive is
+   share-equivalent, so contracts = volume ÷ that date's lot size.
+7. **Expiry weekday is not constant across history:** NIFTY weeklies and monthlies moved to
+   Tuesday from 2025-09-01 (NSE/FAOP/68747). Any hard-coded "last Thursday of the month"
+   is wrong for the second half of the dataset.
+8. **Cloud Trader Pro is blocked by a Google sign-in wall** (`/file/d/{id}/view` → HTTP 401,
+   download routes → sign-in interstitial). No bytes were obtained and no quality claim is
+   made. Do not create an account to get around it.
+9. **Breeze is documented, never called.** Its v2 historical endpoint exposes `1minute`,
+   `5minute`, `30minute`, `1day` — **no 15-minute interval** — and needs AppKey + SecretKey +
+   SessionToken from a live account.
+10. **PDF text extraction uses `pypdf`; NSE probing uses `curl_cffi`.** Both are now listed
+    under "P1 data-audit tooling" in `requirements.txt`. `polars`, `duckdb` and `fastparquet`
+    are **not installed** — do not write code that assumes them.
+11. **Run the suite as `python -m pytest tests`, never bare `pytest`.** There is no
+    `pytest.ini`/`pyproject.toml`, so a bare run collects `vendor/quantjourney-bt/tests/`
+    too and aborts with 8 `ModuleNotFoundError: No module named 'backtester'` collection
+    errors before running anything (`Interrupted: 8 errors during collection`). This cost a
+    false red at the P1 close-out; the suite itself is green.
 
 ## Interfaces you are likely to need
 
@@ -81,8 +127,15 @@ full-universe run exists.
 
 ## Suggested order after P1 review
 
-1. Act on P1 verdict: if 1m options history is genuinely available → build the options
-   data layer and contract reference model before touching strategies.
+P1's verdict changes step 1 from a conditional to a scoping decision, because 1m option
+**prices** are genuinely available while **OI and depth are not**:
+
+1. If approved, build the options data layer exactly as `DATA_FEASIBILITY_REPORT.md` §F
+   specifies — dedup, session filter, the `2025-01-01` OI rescale labelled as an estimate,
+   date-driven lot sizes, and the daily-bhavcopy join for authoritative end-of-day OI —
+   then the contract reference model and an **options** cost model (the current `costs.py`
+   is equity-only). Strategy work comes after that, and any OI-based signal must be
+   restricted to 2024-onwards daily OI.
 2. T9 test suite (offline, cheap, protects the cost model that every later number
    depends on).
 3. T10 full-universe daily run to get honest equity baselines.
@@ -95,3 +148,11 @@ full-universe run exists.
 - Updated `.gitignore` (secret patterns + deliberate artifact versioning)
 - Git baseline commit `b0affd5`
 - `logs/audit_repo_state.txt`, `logs/pytest_baseline.txt`
+
+## Files created during P1
+
+- `DATA_FEASIBILITY_REPORT.md` — sections A–F, the P1 deliverable
+- `DATA_SOURCE_REGISTER.md` — completed (it had been listed in P0 but never written)
+- 37 re-runnable audit scripts `scripts/_p1_*.py` (each one writes its own log)
+- `logs/p1_*` — 64 `.txt|.json` artifacts; git-ignored, regenerate by running the scripts
+- `data/raw/p1_*` — cached bhavcopies, circulars, page HTML, Breeze docs; git-ignored
