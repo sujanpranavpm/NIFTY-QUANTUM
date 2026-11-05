@@ -101,6 +101,97 @@ class SlippageConfig:
 
 
 # --------------------------------------------------------------------------
+# Options execution costs (effective-dated statutory schedule)
+# --------------------------------------------------------------------------
+@dataclass(frozen=True)
+class BrokerageConfig:
+    """Configurable brokerage - no broker is assumed unless the user says so.
+
+    The neutral default is *zero* brokerage: leaving it unconfigured must never
+    silently attribute a cost to a provider the research has not chosen.  When set,
+    brokerage is the lesser of a flat per-order amount and a percentage cap of the
+    premium turnover.
+    """
+
+    model: str = "none"  # "none" | "flat" | "percentage"
+    flat_per_order: float = 0.0
+    percentage: float = 0.0  # fraction of premium turnover (0.0003 = 3 bps)
+    cap_percentage: float = 0.0  # optional ceiling as a fraction of turnover; 0 disables
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class OptionsChargeRegime:
+    """One effective-dated rate for one statutory component of an option trade.
+
+    ``estimated`` is the honesty flag the directive demands: a rate that could not be
+    read from a cached circular/spec is marked ``True`` and every trade that depends on
+    it is excluded from strict financial validation (fail-closed).  ``provenance`` names
+    the source (a circular reference) or records that no cached source carries it.
+    """
+
+    component: str
+    rate_type: str  # "premium_pct" | "per_lot"
+    value: float
+    effective_from: str  # ISO date, inclusive
+    effective_to: str | None = None  # ISO date, inclusive; None = open-ended
+    side: str = "both"  # "both" | "buy" | "sell"
+    provenance: str = ""
+    estimated: bool = True
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def default_options_charge_regimes() -> tuple[OptionsChargeRegime, ...]:
+    """The offline statutory schedule for NSE index options.
+
+    No cached circular or contract spec in ``data/raw/p1_nse`` carries these numbers -
+    the audit script proves that - so *every* statutory rate is flagged ``estimated``
+    with a provenance that says so.  The effective dates encode the direction of the
+    published changes (STT on option premium rose from 0.05% to 0.1% on 2024-10-01) so
+    that effective-date resolution is exercised, not assumed; a trade that uses any
+    estimated rate is not strict-verifiable.
+    """
+    not_in_cache = "not present in cached NSE circulars/contract specs (offline audit); public statutory value"
+    return (
+        OptionsChargeRegime("stt", "premium_pct", 0.0005, "2015-04-01", "2024-09-30",
+                            side="sell", provenance=not_in_cache, estimated=True),
+        OptionsChargeRegime("stt", "premium_pct", 0.001, "2024-10-01", None,
+                            side="sell", provenance=not_in_cache, estimated=True),
+        OptionsChargeRegime("exchange_txn", "per_lot", 20.0, "2015-04-01", None,
+                            provenance=not_in_cache, estimated=True),
+        OptionsChargeRegime("sebi", "premium_pct", 0.000001, "2015-04-01", None,
+                            provenance=not_in_cache, estimated=True),
+        OptionsChargeRegime("stamp_duty", "premium_pct", 0.00003, "2015-04-01", None,
+                            side="buy", provenance=not_in_cache, estimated=True),
+    )
+
+
+@dataclass(frozen=True)
+class IndiaOptionsCosts:
+    """Index-option (long CE/PE) transaction cost model, effective-dated.
+
+    Charges are computed on the premium turnover ``premium x lot_size x lots`` and are
+    applied to the entry and exit legs separately, with partial exits supported.  GST is
+    18% on brokerage + exchange + SEBI, matching the equity model's taxable base.
+    """
+
+    brokerage: BrokerageConfig = field(default_factory=BrokerageConfig)
+    gst_pct: float = 0.18
+    slippage_pct: float = 0.0  # optional extra premium haircut; default neutral
+    regimes: tuple[OptionsChargeRegime, ...] = field(
+        default_factory=default_options_charge_regimes)
+
+    def as_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["regimes"] = [r.as_dict() for r in self.regimes]
+        return d
+
+
+# --------------------------------------------------------------------------
 # Engine
 # --------------------------------------------------------------------------
 @dataclass(frozen=True)

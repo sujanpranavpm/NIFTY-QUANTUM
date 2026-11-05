@@ -1,0 +1,6 @@
+component,rate_type,value,effective_from,effective_to,side,provenance,estimated
+stt,premium_pct,0.0005,2015-04-01,2024-09-30,sell,not present in cached NSE circulars/contract specs (offline audit); public statutory value,True
+stt,premium_pct,0.001,2024-10-01,,sell,not present in cached NSE circulars/contract specs (offline audit); public statutory value,True
+exchange_txn,per_lot,20.0,2015-04-01,,both,not present in cached NSE circulars/contract specs (offline audit); public statutory value,True
+sebi,premium_pct,1e-06,2015-04-01,,both,not present in cached NSE circulars/contract specs (offline audit); public statutory value,True
+stamp_duty,premium_pct,3e-05,2015-04-01,,buy,not present in cached NSE circulars/contract specs (offline audit); public statutory value,True
