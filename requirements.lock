@@ -1,0 +1,36 @@
+# NIFTY QUANT — P2 reproducible dependency contract
+#
+# The exact interpreter and library versions every P2 stage was validated on.
+# This file is the reproducibility contract referenced by PROJECT docs and by
+# `scripts/_p2_env_check.py` (which fails closed when the live environment drifts).
+#
+# Reproduce with:   pip install -r requirements.lock
+# Then verify with: python scripts/_p2_env_check.py
+#
+# Interpreter (not pip-installable; recorded so the pins below are unambiguous):
+#   CPython 3.12.10
+#
+# These are the DIRECT, top-level pins. They are deliberately not a full transitive
+# `pip freeze`: this is a contract for the packages the project imports, not a
+# machine-specific snapshot of every wheel pulled in. Audit-only libraries are kept
+# separate in spirit (see requirements-audit.txt) but are pinned here too so a
+# reviewer can reproduce the offline data-verification scripts exactly.
+
+# --- core research stack -----------------------------------------------------
+pandas==3.0.1
+numpy==2.4.3
+scipy==1.17.1
+pyarrow==25.0.1
+pytest==9.1.1
+
+# --- application / integration layer ----------------------------------------
+yfinance==1.7.0
+plotly==7.1.0
+streamlit==1.64.0
+fastapi==0.141.1
+uvicorn==0.53.0
+SQLAlchemy==2.1.6
+
+# --- audit-only (re-running scripts/ data-verification; not imported by nifty_quant) ---
+curl_cffi==0.17.0
+pypdf==6.21.4

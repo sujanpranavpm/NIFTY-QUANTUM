@@ -136,38 +136,42 @@ def test_earliest_fill_after_signal(approved_engine, market_data):
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
-def test_bracket_stop_target_and_risk_reward(market_data, validation_report):
-    """orders_12 uses a +6%/-3% bracket; when approved its BUY signals carry 2:1 R/R."""
-    from dataclasses import replace
+def test_bracket_stop_target_and_risk_reward(bracket_signal, bracket_live_signal):
+    """orders_12's +6%/-3% bracket resolves to a 2:1 R/R - on a deterministic fixture.
 
-    report = replace(
-        validation_report,
-        verdicts=validation_report.verdicts.copy(),
-        checks=validation_report.checks.copy(),
-    )
-    for col in ["verdict", "checks_passed", "checks_failed", "critical_failures", "failed_checks"]:
-        report.verdicts[col] = report.verdicts[col].astype("object")
-    mask = report.verdicts["strategy_id"] == "orders_12"
-    report.verdicts.loc[mask, "verdict"] = "supported"
-    report.verdicts.loc[mask, "checks_passed"] = 10
-    report.verdicts.loc[mask, "checks_failed"] = 0
-    report.verdicts.loc[mask, "critical_failures"] = 0
-    report.verdicts.loc[mask, "failed_checks"] = ""
-    report.checks.loc[report.checks["strategy_id"] == "orders_12", "passed"] = True
+    This used to be skipped whenever the cached equity data happened to have no
+    fresh orders_12 BUY at the end of the sample, so its 2:1 assertion had never
+    actually run.  The ``bracket_*`` fixtures force exactly one golden cross on a
+    chosen bar, so both stages of the bracket are now observed rather than hoped for:
 
-    engine = SignalEngine(report)
-    signals = engine.generate(market_data.bars, symbols=SYMBOLS)
-    buys = [s for s in signals if s.strategy_id == "orders_12" and s.action == SignalAction.BUY]
-    if not buys:
-        pytest.skip("orders_12 had no fresh BUY signal at the end of this data")
-    for signal in buys:
-        assert signal.entry_price is not None
-        assert signal.stop_loss is not None
-        assert signal.target is not None
-        assert signal.risk_reward is not None
-        assert signal.risk_reward == pytest.approx(2.0, rel=0.05)
-        assert any("stop" in cond.lower() for cond in signal.exit_conditions)
-        assert any("target" in cond.lower() for cond in signal.exit_conditions)
+    * on the cross bar the entry is still pending, so no exit child has activated yet;
+    * one bar later the entry has filled and both the +6% take-profit and the -3%
+      stop-loss are live, giving the published 2:1 reward/risk.
+    """
+    from conftest import BRACKET_CROSS_CLOSE
+
+    # Stage 1: a fresh entry that cannot fill before the next bar.
+    assert bracket_signal.action == SignalAction.BUY
+    assert bracket_signal.position == 0.0
+    assert bracket_signal.entry_price == pytest.approx(BRACKET_CROSS_CLOSE)
+    assert bracket_signal.earliest_fill_at > bracket_signal.as_of
+    # The bracket children only activate on the first fill, so nothing is exitable yet.
+    assert bracket_signal.target is None and bracket_signal.stop_loss is None
+
+    # Stage 2: the entry has filled, so both legs of the bracket are now readable.
+    assert bracket_live_signal.action == SignalAction.EXIT
+    assert bracket_live_signal.position > 0.0
+    assert bracket_live_signal.entry_price is not None
+    assert bracket_live_signal.stop_loss is not None
+    assert bracket_live_signal.target is not None
+    assert bracket_live_signal.risk_reward == pytest.approx(2.0, rel=0.05)
+    assert any("stop" in cond.lower() for cond in bracket_live_signal.exit_conditions)
+    assert any("target" in cond.lower() for cond in bracket_live_signal.exit_conditions)
+
+    # The bracket was built at +6%/-3% from the signal-bar close.
+    entry = bracket_live_signal.entry_price
+    assert bracket_live_signal.target == pytest.approx(round(entry * 1.06, 2))
+    assert bracket_live_signal.stop_loss == pytest.approx(round(entry * 0.97, 2), abs=0.01)
 
 
 def test_signal_fingerprint_reproducibility(approved_engine, market_data):

@@ -2,10 +2,13 @@
 
 Two kinds of fixture live here:
 
-* the smoke-artifact loaders the signal tests have always used, and
+* the smoke-artifact loaders the signal tests have always used,
 * ``bar``/``bars``/``order``/``clock`` and ``minute_block``/``official_eod`` -
   deterministic, hand-built bars and frames for the core-execution and data-normalisation
-  tests, which must not depend on any downloaded dataset.
+  tests, which must not depend on any downloaded dataset, and
+* ``bracket_bars``/``bracket_validation_report`` - a synthetic daily series whose only
+  SMA20/SMA50 golden cross is the final bar, so the bracket strategy's signal can be
+  checked without any dependency on the cached market data.
 
 Everything is offline and deterministic: no fixture touches the network, ``data/`` or
 ``artifacts/``.
@@ -27,10 +30,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from nifty_quant.engine.backtest import run_backtest
 from nifty_quant.research.pipeline import load_market_data
 from nifty_quant.engine.orders import BarData, Order, OrderSide, OrderType
 from nifty_quant.signals import SignalEngine
-from nifty_quant.validation import load_validation
+from nifty_quant.signals.schemas import SignalAction
+from nifty_quant.strategies.orders_12_bracket_trend import BracketTrend
+from nifty_quant.validation import ValidationReport, dev_oos_split, load_validation
 
 SYMBOLS = ["RELIANCE", "TCS", "M_M"]
 
@@ -198,3 +204,128 @@ def official_eod():
               "option_type": opt, "OpnIntrst": oi}
              for day, expiry, strike, opt, oi in rows])
     return make
+
+
+# ---------------------------------------------------------------------------
+# Deterministic bracket-signal fixtures
+#
+# ``orders_12`` attaches a +6%/-3% bracket to an SMA20-above-SMA50 cross, so the
+# 2:1 reward/risk it advertises is only observable when a cross actually lands on
+# the evaluated bar.  Waiting for the cached equity data to produce one makes the
+# test dataset-dependent (and it skipped whenever the sample happened to be flat),
+# so this series *is* the fixture: 40 falling bars, 52 bars pinned at 100, then a
+# single +0.50 tick.  That is engineered so the one and only golden cross is a
+# chosen bar - asserted in the test rather than trusted.
+#
+# The bracket's two children are submitted together with the entry but only
+# *activate* on the first entry fill, which by the next-bar rule cannot happen
+# before the bar after the cross.  So the fixture is offered in two lengths: one
+# that ends on the cross (a fresh BUY with no live exits yet) and one that appends
+# a single fill bar (a live bracket whose target and stop are readable).
+# ---------------------------------------------------------------------------
+BRACKET_SYMBOL = "BRKT"
+BRACKET_ANCHOR = 100.0
+BRACKET_CROSS_CLOSE = BRACKET_ANCHOR + 0.5      # the signal-bar close the bracket anchors on
+# The next bar trades flat *at the same close* so the entry fills while the reward/risk
+# the parser reads (taken from the last-bar reference price) still equals the 2:1 the
+# +6%/-3% bracket was built to from the signal bar.  Anything else would honestly move
+# the measured ratio off 2.0, which is a fill-price effect, not a bracket-construction one.
+BRACKET_FILL_CLOSE = BRACKET_CROSS_CLOSE        # the next bar, where the entry actually fills
+
+
+def bracket_closes(extra: int = 0) -> list[float]:
+    """The literal price path behind the bracket fixtures (restated so tests can re-derive it).
+
+    ``extra=0`` ends on the golden-cross bar; ``extra=1`` appends the single bar on
+    which the bracket entry fills and its take-profit/stop-loss activate.
+    """
+    falling = [150.0 - k for k in range(1, 41)]        # 149 .. 110
+    flat = [BRACKET_ANCHOR] * 52                      # both SMAs converge on 100
+    tail = [BRACKET_CROSS_CLOSE, BRACKET_FILL_CLOSE][: extra + 1]
+    return falling + flat + tail
+
+
+@pytest.fixture
+def bracket_bars():
+    """``{BRACKET_SYMBOL: daily OHLCV frame}`` whose only golden cross is the last bar."""
+    closes = bracket_closes()
+    index = pd.date_range("2024-01-01", periods=len(closes), freq="D")
+    frame = pd.DataFrame({
+        "open": closes,
+        "high": [c * 1.002 for c in closes],
+        "low": [c * 0.998 for c in closes],
+        "close": closes,
+        "volume": [1_000.0] * len(closes),
+    }, index=index)
+    return {BRACKET_SYMBOL: frame}
+
+
+@pytest.fixture
+def bracket_live_bars(bracket_bars):
+    """The same series extended by the one bar on which the bracket entry fills."""
+    frame = bracket_bars[BRACKET_SYMBOL]
+    stamp = frame.index[-1] + pd.Timedelta(days=1)
+    price = BRACKET_FILL_CLOSE
+    fill_bar = pd.DataFrame(
+        {"open": [price], "high": [price * 1.002], "low": [price * 0.998],
+         "close": [price], "volume": [1_000.0]}, index=pd.DatetimeIndex([stamp]))
+    return {BRACKET_SYMBOL: pd.concat([frame, fill_bar])}
+
+
+@pytest.fixture
+def bracket_validation_report():
+    """A hand-built report that supports ``orders_12`` and blocks ``orders_01``.
+
+    No smoke artifact is consulted: the approval gate reads exactly these verdict
+    and check frames, so the gate itself is exercised rather than assumed.
+    """
+    index = pd.date_range("2020-01-01", periods=400, freq="D")
+    split = dev_oos_split(index, dev_fraction=0.7, purge_bars=20, min_oos_bars=100)
+    verdicts = pd.DataFrame([
+        {"strategy_id": "orders_12", "verdict": "supported",
+         "checks_passed": 10, "checks_failed": 0, "critical_failures": 0, "failed_checks": ""},
+        {"strategy_id": "orders_01", "verdict": "rejected",
+         "checks_passed": 3, "checks_failed": 7, "critical_failures": 2, "failed_checks": ""},
+    ])
+    checks = pd.DataFrame(
+        [{"strategy_id": "orders_12", "check": name, "passed": True}
+         for name in ("enough_trades", "oos_profitable", "breadth", "fdr_significant")]
+        + [{"strategy_id": "orders_01", "check": name, "passed": False}
+           for name in ("enough_trades", "oos_profitable")]
+    )
+    empty = pd.DataFrame()
+    return ValidationReport(
+        split=split, dev_oos=empty, walkforward=empty, walkforward_summary=empty,
+        sensitivity=empty, sensitivity_detail=empty, regime_equity=empty,
+        regime_trades=empty, consistency=empty, robustness=empty,
+        checks=checks, verdicts=verdicts, metadata={"source": "synthetic conftest fixture"})
+
+
+def _bracket_signals(bars, report, strategy_id="orders_12"):
+    engine = SignalEngine(report)
+    return engine.generate(bars, symbols=[BRACKET_SYMBOL])
+
+
+@pytest.fixture
+def bracket_signal(bracket_bars, bracket_validation_report):
+    """The fresh BUY ``orders_12`` emits on the engineered cross bar (flat, entry pending)."""
+    buys = [s for s in _bracket_signals(bracket_bars, bracket_validation_report)
+            if s.strategy_id == "orders_12" and s.action == SignalAction.BUY]
+    assert len(buys) == 1, "the fixture must produce exactly one bracket BUY"
+    return buys[0]
+
+
+@pytest.fixture
+def bracket_live_signal(bracket_live_bars, bracket_validation_report):
+    """The signal read one bar later, when the entry has filled and both exits are live."""
+    signals = _bracket_signals(bracket_live_bars, bracket_validation_report)
+    held = [s for s in signals
+            if s.strategy_id == "orders_12" and s.action == SignalAction.EXIT]
+    assert len(held) == 1, "the fixture must leave exactly one bracket position with live exits"
+    return held[0]
+
+
+@pytest.fixture
+def bracket_run(bracket_bars):
+    """The raw ``orders_12`` backtest over the fixture, for fill-level assertions."""
+    return run_backtest("orders_12", bracket_bars, start=None)

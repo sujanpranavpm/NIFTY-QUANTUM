@@ -9,5 +9,6 @@
 # Both are free, open-source libraries; neither is a data purchase and neither pulls
 # in a paid service. Install only when re-running the audits:
 #   pip install -r requirements-audit.txt
-curl_cffi>=0.7
-pypdf>=5.0
+# Pinned to the versions the P2 audit scripts were run against, for reproducibility.
+curl_cffi==0.17.0
+pypdf==6.21.4

@@ -1,22 +1,23 @@
-# Core research stack (pinned to the versions validated in this repo)
-pandas>=2.2,<3.0
-numpy>=1.26,<3.0
-scipy>=1.11
-pyarrow>=15.0
-yfinance>=0.2.40
-plotly>=5.18
-streamlit>=1.30
-fastapi>=0.110
-uvicorn>=0.29
-SQLAlchemy>=2.0
-pytest>=8.0
+# Core research stack — pinned EXACTLY to the interpreter/library stack every P2
+# stage was validated on (CPython 3.12.10). The old `pandas<3.0` range silently
+# disagreed with the pandas 3.0.1 actually running here; that drift is now resolved
+# by pinning rather than recorded. `requirements.lock` is the full frozen contract.
+pandas==3.0.1
+numpy==2.4.3
+scipy==1.17.1
+pyarrow==25.0.1
+pytest==9.1.1
+
+# Application / integration layer — pinned to the versions validated here.
+yfinance==1.7.0
+plotly==7.1.0
+streamlit==1.64.0
+fastapi==0.141.1
+uvicorn==0.53.0
+SQLAlchemy==2.1.6
 
 # Optional: PostgreSQL driver for the production result store.
 # pip install "psycopg[binary]"
 
 # Audit-only tooling (curl_cffi, pypdf) lives in requirements-audit.txt: nothing under
 # nifty_quant/ imports it. Keep this file to what the engine, tests and app actually load.
-#
-# Pin drift recorded, not silently fixed: the pandas constraint below says <3.0 while the
-# environment this repo was validated in runs pandas 3.0.1 (see PROJECT_STATUS.md). A fresh
-# `pip install -r requirements.txt` therefore gets 2.x. Unresolved pending your call.

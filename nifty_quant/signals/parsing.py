@@ -265,6 +265,21 @@ def _entry_price(entry: dict[str, Any] | None, reference_price: float | None) ->
     return reference_price, otype
 
 
+def _order_price(order: dict[str, Any]) -> float | None:
+    """The actionable price of an order, chosen by its type.
+
+    A stop/stop-limit child carries its level in ``stop_price`` and leaves
+    ``limit_price`` empty; a take-profit limit does the opposite.  Selecting by
+    type rather than ``stop_price or limit_price`` matters because an empty
+    numeric cell arrives here as ``NaN``, which is *truthy* - the naive ``or``
+    therefore returned the NaN and silently dropped every bracket take-profit
+    (and, for a stop child, dropped the stop level from the written description).
+    """
+    otype = str(order.get("order_type", "")).lower()
+    key = "stop_price" if otype in STOP_TYPES else "limit_price"
+    return _to_float(order.get(key))
+
+
 def _stop_target(
     entry_price: float | None,
     exit_orders: list[dict[str, Any]],
@@ -274,7 +289,7 @@ def _stop_target(
     target: float | None = None
     for o in exit_orders:
         otype = str(o.get("order_type", "")).lower()
-        price = _to_float(o.get("stop_price") or o.get("limit_price"))
+        price = _order_price(o)
         if price is None:
             continue
         if otype in STOP_TYPES:
@@ -331,8 +346,8 @@ def _flatten_exits(oco_pairs: list[tuple[dict[str, Any] | None, dict[str, Any] |
 def _describe_exit(order: dict[str, Any]) -> str:
     otype = str(order.get("order_type", "")).lower()
     side = str(order.get("side", "")).lower()
-    price = order.get("limit_price") or order.get("stop_price")
-    price_str = f"@{price:.2f}" if price is not None and math.isfinite(float(price)) else ""
+    price = _order_price(order)
+    price_str = f"@{price:.2f}" if price is not None else ""
     if otype in STOP_TYPES:
         return f"{side} {otype}{price_str}"
     if otype == "limit":
