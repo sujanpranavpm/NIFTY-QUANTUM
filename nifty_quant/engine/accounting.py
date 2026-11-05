@@ -34,6 +34,11 @@ class Portfolio:
     slippage_paid: float = 0.0
     turnover: float = 0.0
     fills: list[dict[str, object]] = field(default_factory=list)
+    # Default OFF so the share-based equity path is bit-for-bit unchanged (its
+    # long-side-only realized behaviour is deliberately pinned by the test suite).
+    # Turning it ON credits a buy that covers a short, giving symmetric realized P&L;
+    # the premium-based option model lives in ``options_accounting`` instead.
+    symmetric_realized: bool = False
 
     def __post_init__(self) -> None:
         self.cash = float(self.initial_capital)
@@ -54,7 +59,17 @@ class Portfolio:
         if fill.side == OrderSide.BUY:
             self.cash -= notional + float(fill.commission)
             new_qty = current + quantity
-            if entry is None or current <= 0:
+            if self.symmetric_realized and current < 0 and entry is not None:
+                closed_short = min(quantity, -current)
+                if closed_short > 0:
+                    realized = (entry - price) * closed_short
+                    self.realized_gross += realized
+                if new_qty > 1e-9:
+                    self.avg_entry[fill.instrument] = price   # flip credits short, opens long here
+                elif abs(new_qty) <= 1e-9:
+                    self.avg_entry.pop(fill.instrument, None)
+                # still net short: keep the original short entry to measure against
+            elif entry is None or current <= 0:
                 self.avg_entry[fill.instrument] = price
             else:
                 self.avg_entry[fill.instrument] = (entry * current + price * quantity) / new_qty
@@ -66,6 +81,14 @@ class Portfolio:
                 realized = (price - entry) * closed
                 self.realized_gross += realized
             new_qty = current - quantity
+            if self.symmetric_realized and new_qty < 0:
+                # record the short's own average entry so a later cover can be credited
+                opened_short = quantity - closed
+                if current < 0 and entry is not None:
+                    self.avg_entry[fill.instrument] = (
+                        entry * (-current) + price * opened_short) / (-new_qty)
+                else:
+                    self.avg_entry[fill.instrument] = price
             self.positions[fill.instrument] = new_qty
             if abs(new_qty) < 1e-9:
                 self.positions[fill.instrument] = 0.0

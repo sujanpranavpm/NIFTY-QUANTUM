@@ -192,6 +192,42 @@ class IndiaOptionsCosts:
 
 
 # --------------------------------------------------------------------------
+# Options execution scenarios (directive Part 7)
+# --------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ExecutionScenario:
+    """One set of execution assumptions for an option trade.
+
+    A strategy must not qualify on the optimistic scenario alone: the three named
+    presets (:data:"OPTIMISTIC", :data:"BASELINE", :data:"CONSERVATIVE") differ only in
+    how generously a fill is priced and how strict the liquidity gate is, never in the
+    decision logic (the stop-wins collision rule is fixed across every scenario).  The
+    profitability delta reported between scenarios is exactly the difference these knobs
+    make, so a result that survives only under :data:"OPTIMISTIC" is visibly fragile.
+
+    ``adverse_slippage_bps`` is applied *against* the trader on every fill: a buy pays
+    more, a sell receives less.  ``min_exit_volume`` is a liquidity floor below which an
+    exit cannot be assumed to execute (a fill is rejected, never silently skipped).
+    """
+
+    name: str
+    adverse_slippage_bps: float = 0.0
+    min_exit_volume: float = 0.0  # 0 disables the liquidity gate
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+#: The three explicit, configurable scenarios.  Slippage and liquidity tighten monotonically
+#: from A to C, so a well-behaved trade earns the most under A and the least under C.
+OPTIMISTIC = ExecutionScenario("A_OPTIMISTIC", adverse_slippage_bps=0.0, min_exit_volume=0.0)
+BASELINE = ExecutionScenario("B_BASELINE", adverse_slippage_bps=2.0, min_exit_volume=0.0)
+CONSERVATIVE = ExecutionScenario("C_CONSERVATIVE", adverse_slippage_bps=5.0, min_exit_volume=1.0)
+
+DEFAULT_EXECUTION_SCENARIOS: tuple[ExecutionScenario, ...] = (OPTIMISTIC, BASELINE, CONSERVATIVE)
+
+
+# --------------------------------------------------------------------------
 # Engine
 # --------------------------------------------------------------------------
 @dataclass(frozen=True)

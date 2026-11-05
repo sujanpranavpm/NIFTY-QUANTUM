@@ -297,3 +297,40 @@ def test_the_ledger_keeps_the_running_position_across_a_sequence():
     assert p.positions[TEST] == 0.0
     # entry (100*10 + 110*5)/15 = 103.333: 8*(120-103.333) + 7*(95-103.333) = 75
     assert p.realized_gross == pytest.approx(75.0)
+
+
+# ---------------------------------------------------------------------------
+# The opt-in symmetric realized-P&L mode (P2 stage 6)
+# ---------------------------------------------------------------------------
+# The default long-side-only behaviour above is a deliberate property of the
+# share-based equity model.  ``symmetric_realized`` is an opt-in that credits a buy
+# which covers a short, so the same accounting can measure both sides; enabling it
+# must not disturb the default path.  The premium-based option model itself lives in
+# ``nifty_quant.engine.options_accounting``, not here.
+def test_default_mode_still_leaves_a_covered_short_uncredited():
+    p = Portfolio(initial_capital=100_000.0)   # default: symmetric_realized=False
+    p.apply_fill(sell(10.0, 100.0))
+    p.apply_fill(buy(5.0, 80.0))               # covers half the short
+    assert p.realized_gross == 0.0             # behaviour preserved exactly
+
+
+def test_symmetric_mode_credits_a_short_as_it_is_covered():
+    p = Portfolio(initial_capital=100_000.0, symmetric_realized=True)
+    p.apply_fill(sell(10.0, 100.0))            # short 10 at 100
+    assert p.realized_gross == 0.0
+    p.apply_fill(buy(5.0, 80.0))               # cover 5 at 80 -> +20 each
+    assert p.realized_gross == pytest.approx((100.0 - 80.0) * 5.0)
+    assert p.positions[TEST] == -5.0
+    p.apply_fill(buy(5.0, 80.0))               # cover the rest
+    assert p.realized_gross == pytest.approx(200.0)
+    assert p.positions[TEST] == 0.0
+    assert TEST not in p.avg_entry
+
+
+def test_symmetric_mode_a_flip_past_zero_realises_the_short_then_opens_a_long():
+    p = Portfolio(initial_capital=100_000.0, symmetric_realized=True)
+    p.apply_fill(sell(10.0, 100.0))            # short 10 at 100
+    p.apply_fill(buy(15.0, 90.0))              # cover 10 at 90 (+100), open long 5 at 90
+    assert p.realized_gross == pytest.approx((100.0 - 90.0) * 10.0)
+    assert p.positions[TEST] == 5.0
+    assert p.avg_entry[TEST] == 90.0           # the fresh long leg anchors at its own price
