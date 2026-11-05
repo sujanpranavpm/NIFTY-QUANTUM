@@ -1,0 +1,18 @@
+parameter,effective_from,effective_to,value,provenance,estimated
+board_lot,2000-01-01,2021-11-30,75,"NO OFFICIAL ARBITER (bhavcopy archive starts 2024-01-02); inferred from the provider's own minimum positive traded volume, which is 75 throughout the 2021-05-27 file (logs/lot_schedule.txt)",True
+board_lot,2021-12-01,2024-04-29,50,"official lot 50 on every date from 2024-01-01 to 2024-04-25; before that inferred from the provider's minimum positive traded volume, 50 in the 2021-12-30, 2022-11-24, 2023-06-22 and 2023-12-28 files",True
+board_lot,2024-01-01,2024-04-25,50,observed: NewBrdLotQty=50 printed on NIFTY option rows across 32 cached bhavcopy dates in this window,False
+board_lot,2024-04-30,2024-12-19,25,"official lot 25 sole 2024-04-30..2024-11-21, then modal while 75 was listed for newly issued expiries from 2024-11-22",True
+board_lot,2024-04-30,2025-01-30,25,observed: NewBrdLotQty=25 printed on NIFTY option rows across 138 cached bhavcopy dates in this window,False
+board_lot,2024-11-22,2025-12-24,75,observed: NewBrdLotQty=75 printed on NIFTY option rows across 157 cached bhavcopy dates in this window,False
+board_lot,2024-12-20,2025-12-23,75,"official 75 becomes modal 2024-12-20, sole lot 2025-01-31..2025-10-29, then modal alongside 65 from 2025-10-30",True
+board_lot,2025-10-30,2026-11-03,65,observed: NewBrdLotQty=65 printed on NIFTY option rows across 52 cached bhavcopy dates in this window,False
+board_lot,2025-12-24,2199-12-31,65,"official 65 first listed 2025-10-30, modal from 2025-12-24, sole lot from 2026-01-05 and still current on 2026-11-03; also the current lot in NSE fo_mktlots.csv",True
+expiry_weekly_weekday,2021-01-01,2025-08-31,Thu,"NSE/FAOP/68747 (Thu regime ended 2025-08-29, last Thursday before the change)",False
+expiry_weekly_weekday,2025-09-01,2027-12-31,Tue,NSE/FAOP/68747 dated 2025-06-25: NIFTY weekly and monthly expiry move to Tuesday effective 2025-09-01,False
+price_step_slab,2021-05-27,2026-08-02,0.1,"cached NSE equity-derivatives contract-specifications page (data/raw/p1_nse/contract_specs.html, page dated 11-Aug-2026): index level was already above 15,000 throughout the cached window (measured from bhavcopy index closes), so the >15000-30000 slab applied even before the derived settlement prices visibly moved grid; traded prices stayed on 0.05",False
+price_step_slab,2026-08-03,2199-12-31,0.1,"cached NSE equity-derivatives contract-specifications page (data/raw/p1_nse/contract_specs.html, page dated 11-Aug-2026): price-step ladder 0-15000 -> 0.05, >15000-30000 -> 0.10, >30000 -> 0.20 (circular NSE/FAOP/67135). Window opens on 2026-08-03, the first cached bhavcopy date whose SttlmPric prints off the 0.05 grid; traded prices remain 100% on-grid, so the slab governs settlement prices only",False
+price_tick,2021-05-27,2026-11-03,0.05,"measured: every traded price (open/high/low/close, 318 official bhavcopy dates, 100% on the 0.05 grid) and all 23 provider expiry files spanning the whole archive (2021-05-27 .. 2026-08-04, 100% on-grid) - verified across every cached lot regime and both sides of every lot transition, not from two samples. The window opens at the first provider archive file, whose grid is verified but whose lot era has no exchange arbiter",False
+strike_interval,2024-01-01,2025-12-24,1000,measured: modal StrkPric gap across all NIFTY expiries on 279 cached bhavcopy dates ({1000.0: 279}),False
+strike_interval,2026-01-05,2026-06-30,500,measured: modal StrkPric gap across all NIFTY expiries on 21 cached bhavcopy dates ({500.0: 21}),False
+strike_interval,2026-07-01,2026-11-03,50,measured: modal StrkPric gap across all NIFTY expiries on 18 cached bhavcopy dates ({50.0: 18}),False

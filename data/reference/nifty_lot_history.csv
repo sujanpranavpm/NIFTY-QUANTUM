@@ -1,0 +1,10 @@
+effective_from,effective_to,value,estimated,provenance
+2000-01-01,2021-11-30,75,True,"NO OFFICIAL ARBITER (bhavcopy archive starts 2024-01-02); inferred from the provider's own minimum positive traded volume, which is 75 throughout the 2021-05-27 file (logs/lot_schedule.txt)"
+2021-12-01,2024-04-29,50,True,"official lot 50 on every date from 2024-01-01 to 2024-04-25; before that inferred from the provider's minimum positive traded volume, 50 in the 2021-12-30, 2022-11-24, 2023-06-22 and 2023-12-28 files"
+2024-01-01,2024-04-25,50,False,observed: NewBrdLotQty=50 printed on NIFTY option rows across 32 cached bhavcopy dates in this window
+2024-04-30,2024-12-19,25,True,"official lot 25 sole 2024-04-30..2024-11-21, then modal while 75 was listed for newly issued expiries from 2024-11-22"
+2024-04-30,2025-01-30,25,False,observed: NewBrdLotQty=25 printed on NIFTY option rows across 138 cached bhavcopy dates in this window
+2024-11-22,2025-12-24,75,False,observed: NewBrdLotQty=75 printed on NIFTY option rows across 157 cached bhavcopy dates in this window
+2024-12-20,2025-12-23,75,True,"official 75 becomes modal 2024-12-20, sole lot 2025-01-31..2025-10-29, then modal alongside 65 from 2025-10-30"
+2025-10-30,2026-11-03,65,False,observed: NewBrdLotQty=65 printed on NIFTY option rows across 52 cached bhavcopy dates in this window
+2025-12-24,2199-12-31,65,True,"official 65 first listed 2025-10-30, modal from 2025-12-24, sole lot from 2026-01-05 and still current on 2026-11-03; also the current lot in NSE fo_mktlots.csv"

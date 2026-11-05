@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Iterable
 
 # (symbol, expiry ISO date, strike, option type) - the identity used across providers.
@@ -38,6 +39,34 @@ CONTRACT_KEYS = ("symbol", "expiry", "strike", "option_type")
 BASIS_OFFICIAL_ROW = "official_bhavcopy_row"
 BASIS_DATE_REGIME = "date_regime_fallback"
 BASIS_UNKNOWN = "unknown"
+
+# Versioned home of the effective-dated reference CSVs (built by
+# scripts/_p2_build_reference.py from the cached official records).
+REFERENCE_DIR = Path(__file__).resolve().parents[2] / "data" / "reference"
+
+# NIFTY weekly/monthly expiry weekday regimes, taken from the exchange circular
+# cached under data/raw/p1_nse/circulars - never from an assumed constant.  A
+# regime must never be applied outside its window: the weekday is a function of
+# the date, and 2025-09-01 changed it (NSE/FAOP/68747).
+EXPIRY_WEEKDAY_REGIMES = (
+    ("Thu", date(2000, 1, 1), date(2025, 8, 31),
+     "NSE/FAOP/68747 (Thu regime ended 2025-08-29, last Thursday before the change)"),
+    ("Tue", date(2025, 9, 1), date(2199, 12, 31),
+     "NSE/FAOP/68747 dated 2025-06-25: NIFTY weekly and monthly expiry move to "
+     "Tuesday effective 2025-09-01"),
+)
+
+
+def nifty_expiry_weekday(day: date) -> tuple[str, str, bool]:
+    """Expiry weekday in force on ``day`` -> (weekday name, provenance, estimated).
+
+    Outside every regime window the answer is ``("UNKNOWN", ..., True)``; callers
+    that must not proceed on an unknown cadence check the flag rather than
+    silently receiving today's weekday."""
+    for name, start, end, provenance in EXPIRY_WEEKDAY_REGIMES:
+        if start <= day <= end:
+            return name, provenance, False
+    return "UNKNOWN", f"no expiry weekday regime covers {day.isoformat()}", True
 
 
 @dataclass(frozen=True)

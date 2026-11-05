@@ -1,0 +1,4 @@
+effective_from,effective_to,value,estimated,provenance
+2024-01-01,2025-12-24,1000,False,measured: modal StrkPric gap across all NIFTY expiries on 279 cached bhavcopy dates ({1000.0: 279})
+2026-01-05,2026-06-30,500,False,measured: modal StrkPric gap across all NIFTY expiries on 21 cached bhavcopy dates ({500.0: 21})
+2026-07-01,2026-11-03,50,False,measured: modal StrkPric gap across all NIFTY expiries on 18 cached bhavcopy dates ({50.0: 18})
