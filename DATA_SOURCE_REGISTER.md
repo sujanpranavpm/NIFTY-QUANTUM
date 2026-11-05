@@ -6,8 +6,9 @@ provider's marketing page: the `Status` column describes what was **observed**, 
 `Evidence` names the artifact that shows it.
 
 Written at P1 (2026-11-04), units and lot rows refreshed by the data-accuracy corrections
-(2026-11-05). Companion documents: `DATA_FEASIBILITY_REPORT.md`,
-`DATA_ACCURACY_CORRECTIONS.md` (conclusions), `PROJECT_STATUS.md` (repository state).
+(2026-11-05), free-source assessment and readiness audit added at P2 (2026-11-05). Companion
+documents: `DATA_FEASIBILITY_REPORT.md`, `DATA_ACCURACY_CORRECTIONS.md` (conclusions),
+`P2_READINESS_AUDIT.md` (P2 gate + 13-part acceptance), `PROJECT_STATUS.md` (repository state).
 
 ## Rules this register enforces
 
@@ -118,3 +119,27 @@ Written at P1 (2026-11-04), units and lot rows refreshed by the data-accuracy co
 | NSE circulars / specs | Exchange public circulars | n/a | No | Yes |
 | Cloud Trader Pro | CC0 (declared) | Declared yes | **No file obtained** | **No** |
 | ICICI Breeze | Broker API, account-bound | n/a | Only the public security master | **No (no credentials)** |
+
+## P2 free-source assessment and cost-rate sourcing (2026-11-05)
+
+`scripts/_p2_alt_sources.py` probed, anonymously and at ₹0, whether any legally-usable free
+source can extend NIFTY options **intraday** history beyond the cached archive (`logs/p2_alt_sources.txt`,
+`logs/p2_coverage.txt`):
+
+| Candidate source | Reachable anonymously? | Usable here? | Why |
+|---|---|---|---|
+| NSE official bhavcopy archive | Yes | Reference only | End-of-day only — no minute bars; already the daily completeness arbiter |
+| Breeze / ICICI Direct API | No (sign-in) | **No** | Funded account + API keys — outside the no-accounts / ₹0 rule |
+| CloudTrader / dashboard exports | No (sign-in wall) | **No** | Anonymous reachability yields no data |
+| Vendor tick databases (truebias, etc.) | Commercial | **No** | Paid licence — out of scope |
+
+**Fail-closed conclusion:** the maximum legally-cacheable intraday coverage is the current archive
+(horizon 2026-08-04, newest expiry itself a truncated tail). Dates/contracts outside it stay
+reported `UNKNOWN` / `MISSING` and left unavailable — never extended, back-filled or substituted.
+
+**Derivative charge rates** (`data/reference/options_charge_schedule.csv`, `scripts/_p2_cost_schedule_audit.py`,
+`logs/p2_options_cost.txt`): a full offline scan of the cached `FAOP*.pdf` circulars and
+`contract_specs.html` found **0 of 5** statutory rates (STT / exchange / SEBI / stamp). All five are
+carried as `estimated=True` public statutory values with provenance, and — per the directive — every
+trade using them is **excluded from strict financial validation** (the `transaction_costs_verified`
+readiness gate stays open until a sourced circular is added).

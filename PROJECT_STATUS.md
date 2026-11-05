@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-05 (P0 + P1 complete; data-accuracy corrections and T9 complete)
+Last updated: 2026-11-05 (P0 + P1 + P2 complete; data-accuracy corrections, T9 and the P2 accuracy remediation complete)
 Verified by direct inspection of the working tree and of the real data files — not from
 prior progress reports or provider marketing pages.
 
@@ -216,3 +216,26 @@ Findings that bind all later work, in one line each:
     universe must be derived from the archive, not from the exchange's listing.
     `nifty_quant/derivatives/completeness.py` names each cause separately; nothing is
     silently skipped. See §5 of `DATA_ACCURACY_CORRECTIONS.md`.
+
+## P2 — Master accuracy remediation and readiness (complete)
+
+P2 hardened the derivatives core and added four new subsystems, then produced the first real
+1m/5m/15m NIFTY option candle datasets and closed with a readiness audit. Full detail and every
+figure are in **`P2_READINESS_AUDIT.md`**; the fail-closed gate is
+**`nifty_quant/validation/readiness.py`** (`scripts/_p2_readiness_checks.py`, `logs/p2_readiness.txt`).
+
+- Effective-dated reference DB (`data/reference/*.csv`), a persistent expiry coverage registry
+  (max observed coverage 37.81%, never extended), and a quantified 2026 OI-availability
+  deterioration (33.6%→22.4% provider-observed) — all measured, never fabricated.
+- 23 expiry files × 3 resolutions built to `data/derived/candles/` with **0** OHLC-containment and
+  **0.000000** volume-conservation failures (`logs/p2_candle_integrity.txt`).
+- Options cost engine + execution + symmetric accounting added; equity cost/fill/accounting paths
+  unchanged (accounting extended behind a default-off `symmetric_realized` flag).
+- Dependencies pinned exactly to the validated stack + `requirements.lock`; env check reports
+  13 packages, 0 drift, REPRODUCIBLE.
+- **Test suite: 478 passed, 0 failed, 0 skipped** (`logs/pytest_p2.txt`) — the long-skipped bracket
+  case now runs on a deterministic fixture, which surfaced and fixed a latent NaN-truthy bug in
+  `signals/parsing.py` that had silently dropped every bracket take-profit.
+- **Readiness verdict:** qualified for **research modelling** within the cached archive; **not**
+  qualified for strict financial use because the single open gate is `transaction_costs_verified`
+  (0 of 5 statutory derivative rates are sourced from cache, so options trades are excluded).

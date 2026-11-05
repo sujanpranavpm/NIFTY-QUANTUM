@@ -1,9 +1,10 @@
 # PROJECT_HANDOFF.md
 
 Handoff notes for continuing this project in a fresh session.
-Written at P0 (2026-11-04), refreshed at the P1 close-out (2026-11-04). Read
-`PROJECT_STATUS.md` first — it holds verified facts; this file holds the operational
-knowledge a new session needs to not break things.
+Written at P0 (2026-11-04), refreshed at the P1 close-out (2026-11-04) and again at the P2
+close-out (2026-11-05). Read `PROJECT_STATUS.md` first — it holds verified facts; this file holds
+the operational knowledge a new session needs to not break things. For P2 specifically, read
+`P2_READINESS_AUDIT.md`.
 
 ## Resume point
 
@@ -248,3 +249,23 @@ Any OI-based intraday signal stays restricted to independently verified observat
   milestone) — 300 passing in total, on the deterministic fixtures in `tests/conftest.py`.
   The P1 baseline had only `test_signals.py`.
 - `logs/_m*_run.log` — stdout/tracebacks; git-ignored like all of `logs/`
+
+## P2 close-out (2026-11-05) — what a new session must know
+
+- **Eight atomic commits**, one per stage, `HEAD` at the Stage-8 readiness audit; the tree is clean
+  and every stage is individually revertable. `data/reference/` is tracked; `data/derived/`,
+  `data/options/`, `logs/` remain git-ignored.
+- **Readiness gate is the resume point.** `nifty_quant/validation/readiness.py` fails closed: a
+  resolution is qualified only when all 12 gates are literally `True`. Today 11/12 pass for 1m/5m/15m
+  and the open gate is `transaction_costs_verified`. The next real work (beyond P2) is to source
+  official derivative-charge circulars into `data/reference/options_charge_schedule.csv` (flip those
+  rates to `estimated=False`), otherwise options stay modelling-only.
+- **Determinism contract.** The suite must pass from repo root, from `tests/`, bare `pytest` and
+  `python -m pytest` alike (478 tests) — `tests/conftest.py` pins the repo root onto `sys.path` and
+  now carries the `bracket_*` deterministic fixtures. Do not reintroduce a data-dependent skip.
+- **Pinned stack.** `requirements.lock` is the reproducible contract (python 3.12.10, pandas 3.0.1,
+  numpy 2.4.3, pyarrow 25.0.1, scipy 1.17.1, pytest 9.1.1); verify with `python
+  scripts/_p2_env_check.py` (expect REPRODUCIBLE). Audit-only deps live in `requirements-audit.txt`.
+- **Do not overclaim.** OI is always an estimate; coverage ceilings and `estimated`/`UNKNOWN` flags
+  are reported, never collapsed into false certainty; no EOD look-ahead; equity engine files
+  (`costs.py`, `fill_engine.py`) are untouched by design — options code is additive.
