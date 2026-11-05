@@ -58,6 +58,8 @@ from nifty_quant.derivatives.completeness import (  # noqa: E402
     DAY_MISSING, DAY_MISSING_TRADES, DAY_NO_OI, DAY_NO_TRADES, DAY_PRESENT,
     DAY_TRUNCATED, FILE_ABSENT, FILE_PRESENT, classify_day, classify_file,
 )
+from nifty_quant.derivatives.coverage_registry import (  # noqa: E402
+    registry_status_for_day)
 from nifty_quant.derivatives.timestamps import clock_label  # noqa: E402
 
 NSE = Path("data/raw/p1_nse")
@@ -430,6 +432,9 @@ def main() -> int:
         "published": len(published), "listing_source": listing_source,
         "size_mismatch": size_mismatch, "files": file_reports,
         "day_counts": dict(day_counts), "examples": examples,
+        "registry_status_counts": {
+            registry_status_for_day(status): count
+            for status, count in day_counts.items()},
         "truncated_sessions": truncated_sessions,
         "unverified_file_days": sorted(set(unverified_days))[:200],
     }, indent=1, default=str), encoding="utf-8")

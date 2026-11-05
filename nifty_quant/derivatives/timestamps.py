@@ -244,6 +244,35 @@ def classify_session(frame: pd.DataFrame, *, trading_day: str = "", expiry: str 
                           terminal_bucket_close_pct=close_pct, reasons=tuple(reasons))
 
 
+def duplicate_timestamps(frame: pd.DataFrame, *, stamp_column: str = "timestamp",
+                         keys=("strike", "option_type")) -> pd.DataFrame:
+    """Rows sharing one (contract x timestamp) - a duplicated bar, never a real trade.
+
+    The archive is minute-resolved, so a contract cannot legitimately print the same
+    opening timestamp twice; duplicates must be surfaced and excluded, not silently
+    de-duplicated into the "first" occurrence."""
+    subset = [stamp_column, *keys]
+    dups = frame[frame.duplicated(subset=subset, keep=False)]
+    return dups.sort_values(subset)
+
+
+def session_boundary_violations(labels) -> tuple[str, ...]:
+    """Clock labels falling outside the ``SESSION_OPEN..SESSION_CLOSE`` session.
+
+    These are the stray-label blocks (up to 15:54, all Jan-Mar 2025 and 2025-08-01)
+    for which no convention can be verified; strict validation rejects them rather than
+    guessing where the extra minutes belong."""
+    return tuple(x for x in sorted({clock_label(v) for v in labels})
+                 if not in_session(x))
+
+
+def is_closing_print(stamp, fmt: str = "%H:%M") -> bool:
+    """True for the 15:30 bucket, which is the post-open closing/settlement print, not
+    a minute of trading.  Callers keep it separate in raw output and fold it into the
+    terminal in-session candle only at aggregation time."""
+    return clock_label(stamp, fmt) == SESSION_CLOSE.strftime(fmt)
+
+
 def first_last_bucket(frame: pd.DataFrame, stamp_column: str = "timestamp",
                       volume_column: str = "volume") -> dict:
     """Volume of the opening and terminal buckets relative to a typical minute."""

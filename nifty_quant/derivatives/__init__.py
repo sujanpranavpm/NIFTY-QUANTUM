@@ -16,7 +16,7 @@ provider values.
 from __future__ import annotations
 
 from nifty_quant.derivatives import (
-    calendar, candles, completeness, reference, timestamps, units)
+    calendar, candles, completeness, coverage_registry, reference, timestamps, units)
 from nifty_quant.derivatives.calendar import (
     NOT_TRADING,
     TRADING,
@@ -43,6 +43,7 @@ from nifty_quant.derivatives.candles import (
 from nifty_quant.derivatives.completeness import (
     DAY_INACTIVE,
     DAY_MISSING,
+    DAY_MISSING_TRADES,
     DAY_NO_OI,
     DAY_NO_TRADES,
     DAY_PRESENT,
@@ -54,6 +55,24 @@ from nifty_quant.derivatives.completeness import (
     classify_day,
     classify_file,
     summarise,
+)
+from nifty_quant.derivatives.coverage_registry import (
+    INACTIVE_CONTRACT,
+    MISSING_CANDLE,
+    MISSING_CONTRACT,
+    MISSING_FILE,
+    NO_TRADE,
+    PRESENT as COVERAGE_PRESENT,
+    PRESENT_WITHOUT_OI,
+    TRUNCATED_SESSION,
+    TRUNCATED_TAIL,
+    UNKNOWN,
+    CoverageEntry,
+    CoverageRegistry,
+    high_low_within_official,
+    missing_candle_minutes,
+    registry_status_for_day,
+    registry_status_for_file,
 )
 from nifty_quant.derivatives.reference import (
     BASIS_DATE_REGIME,
@@ -88,9 +107,12 @@ from nifty_quant.derivatives.timestamps import (
     clock_label,
     clock_labels,
     contains_trade,
+    duplicate_timestamps,
     first_last_bucket,
+    is_closing_print,
     label_set,
     minute_volume_profile,
+    session_boundary_violations,
     session_close_stamp,
 )
 from nifty_quant.derivatives.units import (
@@ -123,8 +145,12 @@ __all__ = [
     "BASIS_DATE_REGIME", "BASIS_OFFICIAL_ROW", "BASIS_UNKNOWN",
     "CONTRACT_KEYS", "CONVENTION", "CONVENTION_EVIDENCE", "Conversion", "ContractLot",
     "DAY_INACTIVE", "DAY_MISSING", "DAY_NO_OI", "DAY_NO_TRADES", "DAY_PRESENT",
+    "DAY_MISSING_TRADES", "DAY_TRUNCATED",
     "DayReport", "DayStatus", "EXPIRY_WEEKDAY_REGIMES", "EffectiveParameter", "ExpirySchedule",
     "FILE_ABSENT", "FILE_PRESENT", "FILE_TRUNCATED", "FileReport",
+    "INACTIVE_CONTRACT", "MISSING_CANDLE", "MISSING_CONTRACT", "MISSING_FILE",
+    "NO_TRADE", "PRESENT_WITHOUT_OI", "TRUNCATED_SESSION", "TRUNCATED_TAIL",
+    "UNKNOWN", "CoverageEntry", "CoverageRegistry",
     "LookAheadError", "LotRegime", "LotResolution", "LotTable",
     "NOT_TRADING", "NO_CLOSING_PRINT",
     "NiftyReference", "OFFICIAL_ARBITER_FLOOR", "OI_SCALE_ADJUSTMENT",
@@ -138,10 +164,14 @@ __all__ = [
     "bar_interval", "calendar", "candle_index", "candle_label", "classify_day",
     "classify_file", "classify_session", "clock_label", "clock_labels",
     "contract_lot_for_pnl",
-    "contains_trade", "contract_key", "candles", "completeness", "expiry_from_iso",
-    "first_last_bucket", "label_set", "mark_verified_oi", "minute_index",
+    "contains_trade", "contract_key", "candles", "completeness", "coverage_registry",
+    "duplicate_timestamps", "expiry_from_iso",
+    "first_last_bucket", "high_low_within_official", "is_closing_print", "label_set",
+    "mark_verified_oi", "minute_index", "missing_candle_minutes",
     "minute_volume_profile", "nifty_expiry_weekday",
+    "registry_status_for_day", "registry_status_for_file",
     "nifty_lot_regimes", "normalise_units", "oi_to_share_equivalent",
-    "reference", "share_equivalent_to_contracts", "share_volume_to_contracts",
+    "reference", "session_boundary_violations", "share_equivalent_to_contracts",
+    "share_volume_to_contracts",
     "summarise", "timestamps", "units", "units_verified", "verdicts_by_block",
 ]
