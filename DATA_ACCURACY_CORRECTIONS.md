@@ -449,6 +449,9 @@ pins `pandas>=2.2,<3.0` while the environment this repo was validated in runs **
    `TtlTrfVal` is notional-based and cannot supply rupee turnover for options either.
 7. **No options cost model.** `nifty_quant/engine/costs.py` is an equity delivery-cost model;
    per-lot derivative charges, and hence any options P&L number, are not trustworthy yet.
+   *(Superseded: P2 added `nifty_quant/engine/options_costs.py`, and P2.1 sourced its schedule on
+   premium turnover from official NSE circulars — see `P2_READINESS_AUDIT.md` §7 and
+   `PROJECT_STATUS.md`. The equity `costs.py` above is untouched.)*
 8. **Realized P&L in `accounting.py` is long-side only** — a short closed at a profit credits
    nothing. Now pinned by an explicit test and documented, not hidden.
 9. **Hugging Face licence is `cc-by-nc-4.0`**: non-commercial research only, no redistribution,

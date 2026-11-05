@@ -1,22 +1,27 @@
-"""P2 stage 5 - audit the derivative charge schedule against the cached sources.
+"""P2 stage 5 / P2.1 - audit the derivative charge schedule against its official sources.
 
-The directive requires options statutory charges to be *sourced* from cached circulars
-or contract specs, and every rate that cannot be independently verified from those bytes
-to be marked ``estimated`` and excluded from strict financial validation.  This script
-does exactly that, offline and at zero cost:
+The directive requires options statutory charges to be *sourced* from official documents,
+and every rate that cannot be independently verified from those bytes to be marked
+``estimated`` and excluded from strict financial validation.  P2.1 replaced the earlier
+fabricated ``Rs 20 per lot`` exchange fee with premium-turnover rates read from NSE
+circulars FA73061 / FA56129, the Finance (No.2) Bill 2024 and the NSE STT/levies/stamp
+pages (all fetched at Rs 0 by ``scripts/_p21_charge_sources.py`` into
+``data/raw/p21_charges``).  This script:
 
-1. scan every cached NSE F&O circular (``FAOP*.pdf``) and ``contract_specs.html`` for
-   derivative transaction-charge numbers (STT / transaction charge / SEBI / GST / stamp);
-2. record what it finds (it finds none - the cached circulars cover expiry regimes, not
-   charges), so the ``estimated`` flags are an evidenced conclusion, not a shrug;
-3. write the effective-dated ``options_charge_schedule.csv`` from the encoded defaults,
-   carrying provenance and the estimated flag on every row;
-4. cost a worked option round-trip (lot size resolved from the stage-2 reference DB) and
-   write ``logs/p2_options_cost.txt`` with the cited-vs-estimated split and the resulting
-   ``strict_verifiable`` verdict.
+1. scans the cached NSE F&O circulars and ``contract_specs.html`` (they carry expiry
+   regimes, not charges) so the ``estimated`` flags remain an evidenced conclusion;
+2. writes the effective-dated ``options_charge_schedule.csv`` from the encoded defaults,
+   carrying source_url / circular_ref / basis / verification / provenance / estimated on
+   every row;
+3. preserves the *previous* (pre-P2.1) schedule verbatim in
+   ``options_charge_schedule_superseded.csv`` for auditability;
+4. costs worked option round-trips (lot size resolved from the stage-2 reference DB) and
+   writes ``logs/p2_options_cost.txt`` with the cited-vs-estimated split, the strict
+   verdict, and the effect of the configurable/verified-brokerage rule.
 
 Outputs:
   data/reference/options_charge_schedule.csv
+  data/reference/options_charge_schedule_superseded.csv
   logs/p2_options_cost.txt
 
 Usage (from the repo root):
@@ -37,13 +42,33 @@ from nifty_quant.config import (  # noqa: E402
     BrokerageConfig, IndiaOptionsCosts, default_options_charge_regimes)
 from nifty_quant.derivatives.reference import LotTable  # noqa: E402
 from nifty_quant.engine.options_costs import IndiaOptionsCommission  # noqa: E402
-from nifty_quant.engine.orders import OrderSide  # noqa: E402
 
 NSE = Path("data/raw/p1_nse")
 CIRCULARS = list(NSE.glob("FAOP*.pdf")) + list((NSE / "circulars").glob("FAOP*.pdf"))
 SPECS = NSE / "contract_specs.html"
 OUT_CSV = Path("data/reference/options_charge_schedule.csv")
+OUT_SUPERSEDED = Path("data/reference/options_charge_schedule_superseded.csv")
 OUT_TXT = Path("logs/p2_options_cost.txt")
+
+SCHEDULE_COLUMNS = ["component", "rate_type", "value", "effective_from", "effective_to",
+                    "side", "basis", "source_url", "circular_ref", "verification",
+                    "provenance", "estimated"]
+
+# The pre-P2.1 schedule, kept verbatim so the correction stays traceable: a fabricated
+# flat Rs 20/lot exchange fee and STT rising 0.05% -> 0.1%, every row ``estimated``.
+SUPERSEDED_CSV = (
+    "component,rate_type,value,effective_from,effective_to,side,provenance,estimated\n"
+    "stt,premium_pct,0.0005,2015-04-01,2024-09-30,sell,not present in cached NSE "
+    "circulars/contract specs (offline audit); public statutory value,True\n"
+    "stt,premium_pct,0.001,2024-10-01,,sell,not present in cached NSE circulars/contract "
+    "specs (offline audit); public statutory value,True\n"
+    "exchange_txn,per_lot,20.0,2015-04-01,,both,not present in cached NSE "
+    "circulars/contract specs (offline audit); public statutory value,True\n"
+    "sebi,premium_pct,1e-06,2015-04-01,,both,not present in cached NSE circulars/contract "
+    "specs (offline audit); public statutory value,True\n"
+    "stamp_duty,premium_pct,3e-05,2015-04-01,,buy,not present in cached NSE "
+    "circulars/contract specs (offline audit); public statutory value,True\n"
+)
 
 CHARGE_TOKENS = ("STT", "securities transaction tax", "transaction charge",
                  "turnover charge", "SEBI turnover", "GST", "stamp duty")
@@ -80,15 +105,43 @@ def scan_cached_for_charges(say) -> list[str]:
 
 def write_schedule() -> pd.DataFrame:
     rows = [r.as_dict() for r in default_options_charge_regimes()]
-    frame = pd.DataFrame(rows, columns=["component", "rate_type", "value", "effective_from",
-                                        "effective_to", "side", "provenance", "estimated"])
+    frame = pd.DataFrame(rows, columns=SCHEDULE_COLUMNS)
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(OUT_CSV, index=False)
+    OUT_SUPERSEDED.write_text(SUPERSEDED_CSV, encoding="utf-8")
     return frame
 
 
+def _render_leg(say, res) -> None:
+    """Print one costed leg with a per-component SOURCED/ESTIMATED/CONFIGURABLE tag."""
+    prov_key = {"exchange": "exchange_txn"}  # display key -> provenance key
+    say(f"\n{res.side.upper()} leg @ {res.on_date}  turnover Rs {res.transaction_value:,.2f}")
+    for comp, val in res.components.items():
+        prov = res.provenance.get(prov_key.get(comp, comp), "")
+        if comp == "gst":
+            tag = "DERIVED"      # 18% on brokerage+exchange+ipft+sebi; a config tax knob
+        elif comp == "slippage" or prov.startswith("configurable"):
+            tag = "CONFIGURABLE"
+        elif prov.startswith("estimated"):
+            tag = "ESTIMATED"
+        elif prov.startswith("sourced"):
+            tag = "SOURCED"
+        else:
+            tag = "ASSUMED"
+        say(f"    {comp:>11}: Rs {val:>12,.4f}   [{tag}]")
+    say(f"    {'TOTAL':>11}: Rs {res.total:>12,.4f}")
+
+
 def worked_round_trip(say) -> None:
-    """Cost a long-CE round trip at lot sizes resolved from the stage-2 reference DB."""
+    """Cost long-CE round trips at lot sizes resolved from the stage-2 reference DB.
+
+    Two examples are recalculated under the corrected premium-turnover schedule:
+      * the original 2025 example (entry 2025-01-02, exit 2025-01-30) - its exchange
+        transaction charge falls in the pre-2026 flat era whose effective date is inferred
+        (NSE/FA/64323 PDF 404), so the leg stays ESTIMATED and is NOT strict-verifiable;
+      * a 2026 example (both legs on/after 2026-03-01) - every statutory rate there is
+        read from FA73061, so with brokerage excluded the round trip IS strict-verifiable.
+    """
     lots = 2
     day = date(2025, 1, 30)
     lot_res = LotTable().lot_on(day)
@@ -96,44 +149,56 @@ def worked_round_trip(say) -> None:
     say(f"lot size resolved from the stage-2 reference DB for {day}: {lot_size} "
         f"({'date-regime' if lot_res.known else 'fallback'})")
 
-    neutral = IndiaOptionsCommission(IndiaOptionsCosts())  # brokerage not configured
+    neutral = IndiaOptionsCommission(IndiaOptionsCosts())  # brokerage excluded (model='none')
+
+    # ---- Example 1: the original 2025 worked round trip, recalculated ----
+    say("\n" + "-" * 104)
+    say("EXAMPLE 1 - recalculated 2025 round trip (premium 150 -> 180), brokerage excluded")
+    say("-" * 104)
     trip = neutral.round_trip(entry_premium=150.0, exit_premium=180.0,
                               lot_size=lot_size, lots=lots,
                               entry_date="2025-01-02", exit_date="2025-01-30")
-    # the breakdown display key "exchange" is stored under the provenance key "exchange_txn"
-    prov_key = {"exchange": "exchange_txn"}
     for leg in ("entry", "exit"):
-        res = trip[leg]
-        say(f"\n{res.side.upper()} leg @ {res.on_date}  turnover Rs {res.transaction_value:,.2f}")
-        for comp, val in res.components.items():
-            prov = res.provenance.get(prov_key.get(comp, comp), "")
-            if comp == "gst":
-                tag = "DERIVED"      # 18% on brokerage+exchange+sebi; status follows them
-            elif comp == "slippage" or prov.startswith("configurable"):
-                tag = "CONFIGURABLE"
-            elif prov.startswith("estimated"):
-                tag = "ESTIMATED"
-            elif prov.startswith("sourced"):
-                tag = "SOURCED"
-            else:
-                tag = "ASSUMED"
-            say(f"    {comp:>11}: Rs {val:>12,.4f}   [{tag}]")
-        say(f"    {'TOTAL':>11}: Rs {res.total:>12,.4f}")
-
+        _render_leg(say, trip[leg])
     say(f"\nround-trip total costs: Rs {trip['total_costs']:,.4f}")
+    say(f"brokerage_excluded: {trip['brokerage_excluded']}")
     say(f"strict_verifiable: {trip['strict_verifiable']}")
     if not trip["strict_verifiable"]:
-        say("=> at least one statutory rate is estimated (not in cached sources); this "
-            "trade is EXCLUDED from strict financial validation (fail-closed), exactly as "
-            "the directive requires. The figures are usable for modelling only.")
+        say("=> the 2025 exchange-transaction row is ESTIMATED (pre-2026 flat era; "
+            "NSE/FA/64323 effective date inferred, PDF 404 at Rs 0), so this trade is "
+            "EXCLUDED from strict financial validation (fail-closed). Modelling use only.")
 
-    # brokerage is configurable and assumed nothing: show a configured variant
-    say("\nBrokerage is configurable - with a flat Rs 20/order brokerage the legs become:")
-    priced = IndiaOptionsCommission(
-        IndiaOptionsCosts(brokerage=BrokerageConfig(model="flat", flat_per_order=20.0)))
-    entry = priced.compute(150.0, lot_size, lots, OrderSide.BUY, "2025-01-02")
-    exit_ = priced.compute(180.0, lot_size, lots, OrderSide.SELL, "2025-01-30")
-    say(f"    entry Rs {entry:,.4f} + exit Rs {exit_:,.4f} = Rs {entry + exit_:,.4f}")
+    # ---- Example 2: a 2026 round trip on fully-sourced current-era rates ----
+    say("\n" + "-" * 104)
+    say("EXAMPLE 2 - 2026 round trip (premium 150 -> 180) on FA73061 current-era rates")
+    say("-" * 104)
+    trip26 = neutral.round_trip(entry_premium=150.0, exit_premium=180.0,
+                                lot_size=lot_size, lots=lots,
+                                entry_date="2026-03-02", exit_date="2026-03-20")
+    for leg in ("entry", "exit"):
+        _render_leg(say, trip26[leg])
+    say(f"\nround-trip total costs: Rs {trip26['total_costs']:,.4f}")
+    say(f"brokerage_excluded: {trip26['brokerage_excluded']}")
+    say(f"strict_verifiable: {trip26['strict_verifiable']}")
+    if trip26["strict_verifiable"]:
+        say("=> every statutory rate on these dates is sourced (STT 0.10%, exchange txn "
+            "Rs 3,552.99/cr, IPFT Rs 0.01/cr, SEBI Rs 10/cr, stamp 0.003% buyer) and "
+            "brokerage is excluded, so this round trip IS strict-verifiable.")
+
+    # ---- The configurable / verified-brokerage rule (directive P2.1 section 4) ----
+    say("\n" + "-" * 104)
+    say("BROKERAGE RULE - strict validation needs a verified broker config or exclusion")
+    say("-" * 104)
+    unverified = IndiaOptionsCommission(IndiaOptionsCosts(
+        brokerage=BrokerageConfig(model="flat", flat_per_order=20.0)))
+    verified = IndiaOptionsCommission(IndiaOptionsCosts(
+        brokerage=BrokerageConfig(model="flat", flat_per_order=20.0, verified=True)))
+    u = unverified.round_trip(150.0, 180.0, lot_size, lots, "2026-03-02", "2026-03-20")
+    v = verified.round_trip(150.0, 180.0, lot_size, lots, "2026-03-02", "2026-03-20")
+    say(f"    flat Rs 20/order, verified=False: total Rs {u['total_costs']:,.4f}  "
+        f"strict_verifiable={u['strict_verifiable']} (unverified broker fee)")
+    say(f"    flat Rs 20/order, verified=True : total Rs {v['total_costs']:,.4f}  "
+        f"strict_verifiable={v['strict_verifiable']} (user attests the tariff)")
 
 
 def main() -> int:
@@ -143,26 +208,38 @@ def main() -> int:
         print(text, flush=True)
         lines.append(text)
 
-    say("P2 stage 5 - derivative charge schedule audit (sourced vs estimated)")
+    say("P2.1 - derivative charge schedule audit (sourced vs estimated, premium-turnover basis)")
     say("=" * 104)
     say("searching cached NSE circulars and contract specs for charge rates ...")
     for ev in scan_cached_for_charges(say):
         say(ev)
 
-    say("\nwriting effective-dated options_charge_schedule.csv ...")
+    say("\nwriting effective-dated options_charge_schedule.csv (+ superseded pre-P2.1 file) ...")
     frame = write_schedule()
-    say(frame.to_string(index=False))
-    estimated = int(frame["estimated"].sum())
-    say(f"\nrows: {len(frame)}  sourced: {len(frame) - estimated}  estimated: {estimated}")
+    say(frame[["component", "rate_type", "value", "effective_from", "effective_to", "side",
+               "basis", "verification", "estimated"]].to_string(index=False))
+    estimated = int(frame["estimated"].astype(bool).sum())
+    say(f"\nrows: {len(frame)}  sourced/verified: {len(frame) - estimated}  estimated: {estimated}")
+    core = frame[frame["component"].isin(["stt", "exchange_txn", "ipft", "sebi", "stamp_duty"])]
+    core_est = int(core["estimated"].astype(bool).sum())
+    say(f"core statutory rows (stt/exchange_txn/ipft/sebi/stamp_duty): {len(core)}  "
+        f"estimated: {core_est}")
+    live = core[core["effective_to"].isna()]
+    live_est = int(live["estimated"].astype(bool).sum())
+    say(f"currently in-force core rows (effective_to blank): {len(live)}  estimated: {live_est}"
+        f"  -> {'all sourced' if live_est == 0 else 'some estimated'}")
+    say("estimated rows that remain: pre-2026 exchange_txn (slab convention / inferred "
+        "NSE-FA-64323 date) and the gst config tax knob; stt_exercised rows are "
+        "reference-only (engine has no exercise path).")
 
     say("\n" + "=" * 104)
-    say("worked option round trip")
+    say("worked option round trips (recalculated on the premium-turnover schedule)")
     say("=" * 104)
     worked_round_trip(say)
 
     OUT_TXT.parent.mkdir(parents=True, exist_ok=True)
     OUT_TXT.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\nwrote {OUT_CSV} and {OUT_TXT}", flush=True)
+    print(f"\nwrote {OUT_CSV}, {OUT_SUPERSEDED} and {OUT_TXT}", flush=True)
     return 0
 
 

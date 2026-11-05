@@ -91,20 +91,30 @@ def timestamp_convention() -> bool:
 
 
 def transaction_costs_verified() -> bool:
-    """Strictly *verified* only if some statutory rate was sourced from cached bytes.
+    """Strictly verified only if EVERY core statutory rate row is sourced (estimated=False).
 
-    The stage-5 audit found 0 of 5 rates sourced (all ``estimated``), so the fail-closed
-    answer here is False: no trade using default statutory rates may enter strict
-    financial validation.  The cost *engine* is tested and present; verification is not.
+    P2.1 replaced the fabricated Rs 20/lot exchange fee with premium-turnover rates read
+    from NSE circulars FA73061 / FA56129, the Finance (No.2) Bill 2024 and the NSE
+    STT/levies/stamp pages, so 11 of 15 schedule rows are now verified and every
+    *currently in-force* core row is sourced.  The gate stays fail-closed (False) because
+    three historical ``exchange_txn`` rows (pre-2026-03-01) remain estimated: the FA56129
+    slab rate is a documented first-marginal-slab convention (a member's slab is unknowable
+    for a research book) and the flat Rs 3,503/cr era's effective date is inferred
+    (NSE/FA/64323 PDF returned 404 at Rs 0).  Trades on those dates are excluded from
+    strict financial validation per-trade by ``OptionsCostResult.strict_verifiable``.
     """
     schedule = REFERENCE / "options_charge_schedule.csv"
     if not schedule.exists():
         return False
     frame = pd.read_csv(schedule)
-    if "estimated" not in frame.columns:
+    if "estimated" not in frame.columns or "component" not in frame.columns:
         return False
-    sourced = (frame["estimated"].astype(str).str.lower() == "false").sum()
-    return bool(sourced >= 1)
+    core = frame[frame["component"].isin(
+        ("stt", "exchange_txn", "ipft", "sebi", "stamp_duty"))]
+    if core.empty:
+        return False
+    sourced = core["estimated"].astype(str).str.lower() == "false"
+    return bool(sourced.all())
 
 
 def results_reproducible() -> bool:
@@ -179,9 +189,12 @@ def main() -> int:
         w(f"{r['resolution']:<10} {str(r['qualified']):<10} {gates:<8} {r['failed_gates'] or '-'}")
 
     w("\nHONEST LIMITATIONS (why a gate may stay open):")
-    w("  - transaction_costs_verified is open: 0 of 5 statutory rates were sourced from cached")
-    w("    bytes (all estimated), so per the directive those trades are excluded from strict")
-    w("    financial validation - the cost engine exists and is tested, verification does not.")
+    w("  - transaction_costs_verified is open: P2.1 sourced 11 of 15 schedule rows from official")
+    w("    NSE circulars (FA73061/FA56129), the Finance (No.2) Bill 2024 and the NSE STT/levies/")
+    w("    stamp pages, and every currently in-force core rate is verified. Three historical")
+    w("    exchange_txn rows (pre-2026-03-01) stay estimated (FA56129 slab convention; NSE/FA/")
+    w("    64323 effective date inferred, PDF 404 at Rs 0), so the gate stays fail-closed and")
+    w("    trades on those dates are excluded per-trade by OptionsCostResult.strict_verifiable.")
     w("  - intraday coverage horizon is the cached provider archive (newest expiry truncated);")
     w("    no free, no-account source extends it, so it is reported, never fabricated.")
     w("  - OI-observation availability on exchange-positive contract-days is measured (33.6%")

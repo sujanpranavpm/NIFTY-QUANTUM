@@ -118,21 +118,35 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
 
 ## 7. Options cost model
 
-**Verdict: dedicated effective-dated engine; every unverified rate is estimated and excluded (fail-closed).**
+**Verdict: dedicated effective-dated engine on *premium turnover*; current-era rates sourced from official NSE circulars, the pre-2026 exchange rows estimated and excluded (fail-closed).**
 
 - `nifty_quant/engine/options_costs.py` (`IndiaOptionsCommission`) computes brokerage (neutral
-  default — **no broker assumed without configuration**), STT on premium (sell side), exchange
-  transaction charge (per lot), SEBI, GST (18% on brokerage+exchange+SEBI), stamp duty (buy leg),
-  and slippage, on premium × lot_size × lots, **entry and exit separately**, partial exits
-  prorated. Exports a per-trade breakdown mirroring the equity model (detail excludes `total`).
-- The schedule `data/reference/options_charge_schedule.csv` is effective-dated. The offline audit
-  (`logs/p2_options_cost.txt`, `scripts/_p2_cost_schedule_audit.py`) found **0 of 5 statutory
-  rates** present in cached circulars/spec pages → all 5 flagged `estimated=True`.
-- Worked round-trip (lot 75, buy 22,500 / sell 27,000 turnover): BUY leg Rs 47.9016, SELL leg Rs
-  74.2319, **round-trip Rs 122.1334**, `strict_verifiable: False` → **excluded from strict
-  financial validation**, usable for modelling only. The equity `costs.py` is untouched (additive).
-- Tests: `tests/test_options_costs.py` (component-by-component against a hand-computed trade,
-  effective-date boundaries, entry/exit asymmetry, partial-exit proration, unverified excluded).
+  default — **no broker assumed without configuration**; strict validation needs a *verified*
+  broker config or explicit exclusion), STT on premium (sell side), the NSE exchange transaction
+  charge **and the NSE IPFT contribution on premium turnover, each side** (P2.1 removed the
+  fabricated `Rs 20 per lot` fee), SEBI, GST (18% on brokerage+exchange+IPFT+SEBI), stamp duty
+  (buy leg) and slippage, on premium × lot_size × lots, **entry and exit separately**, partial
+  exits prorated. Exports a per-trade breakdown mirroring the equity model (detail excludes `total`).
+- The schedule `data/reference/options_charge_schedule.csv` is effective-dated and now carries
+  `source_url` / `circular_ref` / `basis` / `verification` per row. The P2.1 audit
+  (`logs/p2_options_cost.txt`, `scripts/_p2_cost_schedule_audit.py`) sourced **11 of 15 rows** from
+  NSE circulars **FA73061** (Rs 3,552.99/cr txn + Rs 0.01/cr IPFT wef 2026-03-01) and **FA56129**
+  (wef 2023-04-01), the **Finance (No.2) Bill 2024 cl.155** (STT 0.0625%→0.10% wef 2024-10-01) and
+  the **NSE STT/levies/stamp** pages (STT 0.15% wef 2026-04-01; SEBI 0.0001%; stamp 0.003% buyer).
+  STT has three verified eras; exchange txn four (the three pre-2026 rows stay `estimated`: slab
+  convention + inferred NSE/FA/64323 date, PDF 404 at ₹0); IPFT three verified eras. The pre-P2.1
+  schedule is preserved in `data/reference/options_charge_schedule_superseded.csv`.
+- Worked round-trip recalculated (lot 75, 2 lots, premium 150→180; BUY turnover 22,500 / SELL
+  27,000): BUY leg **Rs 10.1348**, SELL leg **Rs 38.3517**, **round-trip Rs 48.4865** — far below
+  the old per-lot figure (Rs 122.13), which the fabricated fee had inflated. On **2025** dates
+  `strict_verifiable: False` (pre-2026 exchange era estimated → excluded); on **2026** dates the same
+  trade is `strict_verifiable: True` (every current-era rate sourced, brokerage excluded). FA73061
+  kept txn+IPFT constant at Rs 3,553/cr, so the two eras cost the same. The equity `costs.py` is
+  untouched (additive).
+- Tests: `tests/test_options_costs.py` (component-by-component against a hand-computed trade, every
+  historical STT/exchange/IPFT boundary, premium-turnover basis, entry/exit asymmetry, multiple lots,
+  partial-exit proration, GST base + config fallback, verified/excluded/unverified brokerage, the
+  recalculated worked example, reference-only exercised-option STT, unverified excluded).
 
 ## 8. Execution simulation
 
@@ -182,13 +196,14 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
 
 ## 11. Full pytest results
 
-- **495 passed, 0 failed, 0 skipped** in 84.78s (`logs/pytest_p2.txt`, reconciliation re-run
-  2026-11-05), from the documented project command at repo root. The **478** figure quoted at
-  the Stage-7 commit was correct *at that commit*: Stage 8 then added the 17 readiness-gate
-  tests (`tests/test_readiness_gating.py`), taking the suite to 495. Nothing was removed —
-  478 + 17 = 495, the same suite plus the Stage-8 file.
+- **508 passed, 0 failed, 0 skipped** is the authoritative count at HEAD after **P2.1**
+  (`logs/_p21_full_suite.log`, re-run 2026-11-05); the P2 reconciliation run was **495 passed,
+  0 failed, 0 skipped** in 84.78s (`logs/pytest_p2.txt`), and P2.1 added 13 net options-cost
+  tests for the premium-turnover schedule (495 + 13 = 508, nothing removed). The **478** figure
+  quoted at the Stage-7 commit was correct *at that commit*: Stage 8 then added the 17
+  readiness-gate tests (`tests/test_readiness_gating.py`), taking the suite to 495.
 - Discovery parity confirmed: `pytest`, `python -m pytest` at root, and from `tests/` all collect
-  the identical **495 tests** (the conftest pins the repo root onto `sys.path`).
+  the identical suite (508 after P2.1; the conftest pins the repo root onto `sys.path`).
 - The long-`skipped` bracket case `test_bracket_stop_target_and_risk_reward` now runs on a
   deterministic `conftest` fixture (an engineered single golden cross), reaching **zero skips**.
   Building that fixture exposed and fixed a latent bug in `nifty_quant/signals/parsing.py`:
@@ -200,9 +215,11 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
 
 ## 12. Remaining data limitations (stated honestly)
 
-- **Cost verification is the open gate.** 0 of 5 statutory derivative rates are sourced from
-  cached bytes; all are `estimated`, so options trades are **excluded from strict financial
-  validation** (fail-closed) and usable for modelling only.
+- **Cost verification is the open gate.** P2.1 sourced **11 of 15** charge-schedule rows from
+  official NSE circulars / Finance Bill / pages (every *current-era* rate verified); the three
+  pre-2026 `exchange_txn` rows stay `estimated` (slab convention + inferred NSE/FA/64323 date), so
+  trades on those dates are **excluded from strict financial validation** (fail-closed), while a
+  trade dated ≥ 2026-03-01 with brokerage excluded or verified is `strict_verifiable=True`.
 - **Coverage ceiling is 37.81%** of exchange-enumerated contract-days; 2021–2023 has no OI arbiter
   (10,708 unverifiable cells); single-source 2021–2023.
 - **OI availability is an estimate and deteriorates in 2026** (22.4% provider-observed, 13.1%
@@ -225,18 +242,20 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
   within the cached archive under the stated exclusions. It is **NOT qualified for strict
   financial use** because the derivative cost-verification gate remains open (estimated statutory
   rates) — exactly as the directive requires the system to fail closed rather than overclaim.
-- P2 ingestion is authorised only for non-strict research. The next real step (out of P2 scope) is
-  to source official derivative charge circulars to flip `transaction_costs_verified`, or accept
-  the estimated-cost exclusion permanently for options strategies.
+- P2 ingestion is authorised only for non-strict research. P2.1 then sourced the official
+  derivative-charge circulars at ₹0 (11 of 15 rows verified), but `transaction_costs_verified`
+  stays open on the three pre-2026 `exchange_txn` rows; closing it fully needs NSE/FA/64323
+  (Sep-2024, PDF 404) or a permanent per-trade exclusion for pre-2026 dates (already enforced).
 
 ---
 
 ## 14. Reconciliation appendix (final consistency audit, 2026-11-05)
 
-**Test count.** The authoritative count at HEAD is **495 passed, 0 failed, 0 skipped**
-(`logs/pytest_p2.txt`, re-run for this appendix). Documents quoting 478 refer to the Stage-7
-commit, before the 17 Stage-8 readiness tests existed; 478 + 17 = 495 and no test was ever
-deleted. Every report now cites 495.
+**Test count.** The authoritative count at HEAD is **508 passed, 0 failed, 0 skipped** after
+P2.1 (`logs/_p21_full_suite.log`, re-run for this appendix); the P2 reconciliation was **495**
+(`logs/pytest_p2.txt`) and P2.1 added 13 net options-cost tests (495 + 13 = 508). Documents
+quoting 478 refer to the Stage-7 commit, before the 17 Stage-8 readiness tests existed; 478 + 17
+= 495 and no test was ever deleted. Every report now cites 508.
 
 **Coverage denominators (why four different figures are all correct).**
 
@@ -253,17 +272,23 @@ vs 28,754 ÷ 68,638 = 41.89%. The registry reconciles against `logs/m5_completen
 exchange-enumerated subset (`reconcile: MATCH`), so neither number was altered to force
 agreement.
 
-**Cost model audit (re-verified at HEAD).** `nifty_quant/engine/options_costs.py` charges on
-premium turnover `|premium| × lot_size × lots`, entry and exit legs separately, partial exits
-prorated. Side applicability matches the schedule: STT sell-only (0.05% to 2024-09-30, 0.1%
-from 2024-10-01), stamp duty buy-only (0.003%), exchange transaction charge ₹20 per lot both
-sides, SEBI 0.0001% both sides; GST 18% on brokerage + exchange + SEBI only (statutory levies
-excluded from the GST base); slippage is an optional configured premium haircut (default 0).
-Brokerage defaults to `model="none"` → ₹0, so no provider is assumed. `resolve_rate` raises
+**Cost model audit (re-verified at HEAD after P2.1).** `nifty_quant/engine/options_costs.py`
+charges on premium turnover `|premium| × lot_size × lots`, entry and exit legs separately, partial
+exits prorated. Side applicability matches the schedule: STT sell-only (0.0625% to 2024-09-30,
+0.10% from 2024-10-01, 0.15% from 2026-04-01), the NSE exchange transaction charge **and the NSE
+IPFT contribution on premium turnover, each side** (P2.1 removed the fabricated `Rs 20 per lot`
+fee), stamp duty buy-only (0.003%), SEBI 0.0001% both sides; GST 18% on brokerage + exchange +
+IPFT + SEBI; slippage is an optional configured premium haircut (default 0). Brokerage is
+configurable and defaults to `model="none"` → ₹0, so no provider is assumed; strict validation now
+requires a *verified* broker config or explicit exclusion. `resolve_rate` raises
 `UnknownChargeError` when no effective-dated regime covers a date (no silent cross-year
-fallback). All 5 schedule rows carry `estimated=True` with provenance "not present in cached
-NSE circulars" → `strict_verifiable=False` on every trade → the `transaction_costs_verified`
-gate stays **closed**. No rate was invented or upgraded to verified.
+fallback). **11 of 15** schedule rows carry `verification="verified"` with an official
+`source_url`; the three pre-2026 `exchange_txn` rows and the GST config knob stay `estimated`, so
+`strict_verifiable=False` for trades on those dates and the schedule-level
+`transaction_costs_verified` gate stays **closed** for the full horizon (while a current-era trade
+≥ 2026-03-01 is strict-verifiable per trade). No rate was invented or upgraded to verified without
+its official source; the pre-P2.1 schedule is preserved in
+`data/reference/options_charge_schedule_superseded.csv`.
 
 **Four-way status distinction (binding for all future work).**
 
@@ -271,8 +296,10 @@ gate stays **closed**. No rate was invented or upgraded to verified.
    candle datasets, cost/execution/accounting engines, readiness gate — all built and tested.
 2. **Research modelling: permitted** within the cached archive under the stated exclusions
    (estimated costs, OI as estimate, coverage ceilings honoured).
-3. **Strict financial validation: blocked** until official derivative-charge circulars flip
-   `transaction_costs_verified` (0 of 5 rates sourced today).
+3. **Strict financial validation: blocked** — P2.1 sourced 11 of 15 rows and every current-era
+   rate, but the three pre-2026 `exchange_txn` rows stay `estimated`, so
+   `transaction_costs_verified` remains open for the full horizon (a current-era trade
+   ≥ 2026-03-01 is strict-verifiable per trade).
 4. **Strategy validation: not yet completed.** No options strategy has been run through the
    validation gate; the equity smoke run remains 0-of-6 passing by scope, not by quality.
 

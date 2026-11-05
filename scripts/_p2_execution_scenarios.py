@@ -80,7 +80,7 @@ def money(x: float) -> str:
 def run():
     lines: list[str] = []
     say = lines.append
-    commission = IndiaOptionsCommission()  # default schedule: every rate estimated
+    commission = IndiaOptionsCommission()  # default schedule; 2025 date -> pre-2026 exchange era
     engine = OptionsExecutionEngine(commission=commission)
     rules = ExitRules(stop_premium=90.0, target_premium=120.0)
     scenarios = (OPTIMISTIC, BASELINE, CONSERVATIVE)
@@ -116,7 +116,8 @@ def run():
     say("  (a strategy that pays only under A is fragile; qualification is not granted "
         "on the optimistic result alone)")
     say(f"Strict financial verifiability of these P&L figures: "
-        f"{a.strict_verifiable}  (default statutory rates are estimated -> excluded)")
+        f"{a.strict_verifiable}  (this 2025 trade's exchange-txn rate is a pre-2026 "
+        f"estimated era -> excluded; current-era rates are sourced)")
     say("")
 
     say("B. Stop/target collision in one bar - conservative resolution")
@@ -151,10 +152,11 @@ def run():
 
 
 def scheme_note(commission: IndiaOptionsCommission) -> str:
-    has_estimated = any(r.estimated for r in commission.config.regimes)
-    return ("IndiaOptionsCommission, effective-dated, "
-            + ("ALL statutory rates estimated -> not strict-verifiable"
-               if has_estimated else "sourced rates"))
+    regs = commission.config.regimes
+    est = sum(1 for r in regs if r.estimated)
+    return ("IndiaOptionsCommission, effective-dated premium-turnover schedule, "
+            f"{len(regs) - est}/{len(regs)} rows sourced; a trade on a date whose rate "
+            "is estimated is not strict-verifiable")
 
 
 if __name__ == "__main__":

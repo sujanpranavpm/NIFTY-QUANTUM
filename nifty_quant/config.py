@@ -111,12 +111,19 @@ class BrokerageConfig:
     silently attribute a cost to a provider the research has not chosen.  When set,
     brokerage is the lesser of a flat per-order amount and a percentage cap of the
     premium turnover.
+
+    ``verified`` is the P2.1 honesty flag for broker-specific fees: brokerage is *not*
+    a statutory rate, so strict financial validation requires either that the chosen
+    broker configuration be marked ``verified=True`` (the user attests it matches their
+    broker's published tariff) or that brokerage be excluded (``model='none'``).  An
+    unverified non-zero brokerage is charged for modelling but never strict-verifiable.
     """
 
     model: str = "none"  # "none" | "flat" | "percentage"
     flat_per_order: float = 0.0
     percentage: float = 0.0  # fraction of premium turnover (0.0003 = 3 bps)
     cap_percentage: float = 0.0  # optional ceiling as a fraction of turnover; 0 disables
+    verified: bool = False  # user attests this matches their broker's published tariff
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -127,17 +134,25 @@ class OptionsChargeRegime:
     """One effective-dated rate for one statutory component of an option trade.
 
     ``estimated`` is the honesty flag the directive demands: a rate that could not be
-    read from a cached circular/spec is marked ``True`` and every trade that depends on
-    it is excluded from strict financial validation (fail-closed).  ``provenance`` names
-    the source (a circular reference) or records that no cached source carries it.
+    read from an official source is marked ``True`` and every trade that depends on it
+    is excluded from strict financial validation (fail-closed).  ``provenance`` records
+    what the source actually says; ``source_url`` and ``circular_ref`` name the official
+    document the value was read from; ``basis`` is the calculation basis (premium
+    turnover / intrinsic value / taxable fee base); ``verification`` is the human status
+    (``verified`` | ``estimated`` | ``reference-only`` | ``config``).  A rate is only
+    ``estimated=False`` when its value was read from the cited official document.
     """
 
     component: str
-    rate_type: str  # "premium_pct" | "per_lot"
+    rate_type: str  # "premium_pct" | "intrinsic_pct" | "fee_pct" | "per_lot" (legacy)
     value: float
     effective_from: str  # ISO date, inclusive
     effective_to: str | None = None  # ISO date, inclusive; None = open-ended
     side: str = "both"  # "both" | "buy" | "sell"
+    basis: str = "premium_turnover"  # "premium_turnover" | "intrinsic_value" | "fee_base"
+    source_url: str = ""
+    circular_ref: str = ""
+    verification: str = "estimated"  # "verified" | "estimated" | "reference-only" | "config"
     provenance: str = ""
     estimated: bool = True
 
@@ -146,27 +161,169 @@ class OptionsChargeRegime:
 
 
 def default_options_charge_regimes() -> tuple[OptionsChargeRegime, ...]:
-    """The offline statutory schedule for NSE index options.
+    """The effective-dated statutory schedule for NSE index options, sourced at Rs 0.
 
-    No cached circular or contract spec in ``data/raw/p1_nse`` carries these numbers -
-    the audit script proves that - so *every* statutory rate is flagged ``estimated``
-    with a provenance that says so.  The effective dates encode the direction of the
-    published changes (STT on option premium rose from 0.05% to 0.1% on 2024-10-01) so
-    that effective-date resolution is exercised, not assumed; a trade that uses any
-    estimated rate is not strict-verifiable.
+    P2.1 replaced the earlier fabricated ``Rs 20 per lot`` exchange fee with charges on
+    *premium turnover*, each rate read from an official document cached under
+    ``data/raw/p21_charges`` (fetched by ``scripts/_p21_charge_sources.py``).  Every row
+    carries its ``source_url``, ``circular_ref``, ``basis`` and a ``verification`` status;
+    ``estimated`` stays ``True`` only where the value or its effective date could not be
+    read from an official source (fail-closed), and such rows are excluded from strict
+    financial validation per trade.
+
+    Sourcing notes (see ``logs/p21_excerpts_*.txt`` for the verbatim bytes):
+      * Exchange transaction charge + NSE IPFT are levied *each side* on the traded
+        premium.  The current flat regime (Rs 3,552.99 txn + Rs 0.01 IPFT per crore, wef
+        2026-03-01) is read straight from NSE circular FA73061.  The prior flat regime
+        (Rs 3,503 + Rs 50 per crore) is the "existing" column FA73061 quotes for
+        NSE/FA/64323 (2024-09-27); that circular's PDF returned 404 at Rs 0, so its
+        effective date is *inferred* and the row stays ``estimated``.  The pre-2024 slab
+        regimes (FA56129, Rs per lakh of premium) depend on a member's monthly volume,
+        which is unknowable for a research book, so the first marginal slab is used as a
+        documented conservative convention and those rows stay ``estimated``.
+      * STT on the option *seller* (premium) is verified across three eras: 0.0625%
+        (Finance (No.2) Bill 2024 cl.155 "existing"), 0.10% wef 2024-10-01 (same clause +
+        NSE STT page), 0.15% wef 2026-04-01 (NSE STT page, Finance Act 2026).
+      * ``stt_exercised`` rows are reference-only: the execution engine exits at the
+        premium sale and has no exercise path, so intrinsic-value STT is recorded for
+        auditability but never applied (``basis='intrinsic_value'``).
+      * SEBI turnover fee (0.0001% = Rs 10/crore) and stamp duty (0.003%, buyer) are read
+        from the NSE published levies/stamp pages.
+      * GST (18% on the taxable fee base) is a *config* tax knob, not a strictness-gating
+        statutory charge: the row is documented ``estimated`` and the engine applies
+        ``IndiaOptionsCosts.gst_pct``.
     """
-    not_in_cache = "not present in cached NSE circulars/contract specs (offline audit); public statutory value"
+    FA73061 = "https://nsearchives.nseindia.com/content/circulars/FA73061.pdf"
+    FA56129 = "https://nsearchives.nseindia.com/content/circulars/FA56129.pdf"
+    FB2425 = "https://www.indiabudget.gov.in/budget2024-25/doc/Finance_Bill.pdf"
+    NSE_STT = ("https://www.nseindia.com/static/products-services/"
+               "equity-derivatives-securities-transaction-tax")
+    NSE_LEVIES = ("https://www.nseindia.com/static/invest/"
+                  "first-time-investor-sebi-turnover-fees-stt-other-levies")
+    NSE_STAMP = ("https://www.nseindia.com/static/invest/"
+                 "first-time-investor-stamp-duty-charges-taxes")
     return (
-        OptionsChargeRegime("stt", "premium_pct", 0.0005, "2015-04-01", "2024-09-30",
-                            side="sell", provenance=not_in_cache, estimated=True),
-        OptionsChargeRegime("stt", "premium_pct", 0.001, "2024-10-01", None,
-                            side="sell", provenance=not_in_cache, estimated=True),
-        OptionsChargeRegime("exchange_txn", "per_lot", 20.0, "2015-04-01", None,
-                            provenance=not_in_cache, estimated=True),
-        OptionsChargeRegime("sebi", "premium_pct", 0.000001, "2015-04-01", None,
-                            provenance=not_in_cache, estimated=True),
-        OptionsChargeRegime("stamp_duty", "premium_pct", 0.00003, "2015-04-01", None,
-                            side="buy", provenance=not_in_cache, estimated=True),
+        # ---- STT on the option premium, seller side (three verified eras) ----
+        OptionsChargeRegime(
+            "stt", "premium_pct", 0.000625, "2019-09-01", "2024-09-30", side="sell",
+            basis="premium_turnover", source_url=FB2425,
+            circular_ref="Finance (No.2) Bill 2024, cl.155 (existing rate)",
+            verification="verified", estimated=False,
+            provenance="cl.155: 'securities transaction tax on sale of an option in "
+                       "securities is 0.0625 per cent. of the option premium' (existing)."),
+        OptionsChargeRegime(
+            "stt", "premium_pct", 0.001, "2024-10-01", "2026-03-31", side="sell",
+            basis="premium_turnover", source_url=FB2425,
+            circular_ref="Finance (No.2) Bill 2024 cl.155; NSE STT page (upto 2026-03-31)",
+            verification="verified", estimated=False,
+            provenance="cl.155 increases option-sale STT to 0.1 per cent of premium wef "
+                       "1st October 2024; NSE STT page confirms 0.10% upto 2026-03-31."),
+        OptionsChargeRegime(
+            "stt", "premium_pct", 0.0015, "2026-04-01", None, side="sell",
+            basis="premium_turnover", source_url=NSE_STT,
+            circular_ref="NSE STT schedule, Finance Act 2026 (wef 2026-04-01)",
+            verification="verified", estimated=False,
+            provenance="NSE STT page: 'Sale of an option in securities 0.15 per cent "
+                       "(w.e.f. April 1, 2026) / 0.10 per cent (upto March 31, 2026), "
+                       "Seller', on the option premium."),
+        # ---- STT on an exercised option, purchaser side, intrinsic value ----
+        # Reference-only: the engine exits at the premium sale (no exercise path).
+        OptionsChargeRegime(
+            "stt_exercised", "intrinsic_pct", 0.00125, "2019-09-01", "2026-03-31",
+            side="buy", basis="intrinsic_value", source_url=NSE_STT,
+            circular_ref="NSE STT schedule row (b), wef 2019-09-01",
+            verification="reference-only", estimated=False,
+            provenance="NSE STT page: 'Sale of an option ... where option is exercised "
+                       "0.125 per cent (upto March 31, 2026), Purchaser', on intrinsic "
+                       "value. Recorded for auditability; NOT applied (no exercise path)."),
+        OptionsChargeRegime(
+            "stt_exercised", "intrinsic_pct", 0.0015, "2026-04-01", None,
+            side="buy", basis="intrinsic_value", source_url=NSE_STT,
+            circular_ref="NSE STT schedule row (b), Finance Act 2026",
+            verification="reference-only", estimated=False,
+            provenance="NSE STT page: exercised-option STT 0.15 per cent wef April 1 2026, "
+                       "Purchaser, on intrinsic value. Reference-only; not applied."),
+        # ---- NSE exchange transaction charge, each side, on traded premium ----
+        OptionsChargeRegime(
+            "exchange_txn", "premium_pct", 0.00053, "2021-01-01", "2023-03-31",
+            basis="premium_turnover", source_url=FA56129,
+            circular_ref="NSE/FA/56129 (2023-03-24) 'Existing' column; prior NSE/FA/46730",
+            verification="estimated", estimated=True,
+            provenance="FA56129 'Existing' first marginal slab Rs 53.00 per lakh of "
+                       "premium (Rs 3Cr-100Cr) = 0.053%. Slab depends on member monthly "
+                       "volume (unknowable for a research book); first slab used as a "
+                       "conservative convention."),
+        OptionsChargeRegime(
+            "exchange_txn", "premium_pct", 0.0005, "2023-04-01", "2024-09-30",
+            basis="premium_turnover", source_url=FA56129,
+            circular_ref="NSE/FA/56129 (2023-03-24) 'Revised', wef 2023-04-01",
+            verification="estimated", estimated=True,
+            provenance="FA56129 'Revised' first marginal slab Rs 50.00 per lakh of premium "
+                       "wef 2023-04-01 = 0.05%. Slab convention as above; end date "
+                       "inferred (NSE/FA/64323 effective date not sourced - PDF 404)."),
+        OptionsChargeRegime(
+            "exchange_txn", "premium_pct", 0.0003503, "2024-10-01", "2026-02-28",
+            basis="premium_turnover", source_url=FA73061,
+            circular_ref="NSE/FA/64323 (2024-09-27) [cited by FA73061; PDF 404 at Rs 0]",
+            verification="estimated", estimated=True,
+            provenance="FA73061 'Existing' column: Rs 3,503 per crore each side (uniform "
+                       "per-crore rate set by NSE/FA/64323 per SEBI circular 2024/92). "
+                       "VALUE verified via FA73061; effective_from INFERRED (64323 PDF "
+                       "404), so the row stays estimated (fail-closed on the date)."),
+        OptionsChargeRegime(
+            "exchange_txn", "premium_pct", 0.000355299, "2026-03-01", None,
+            basis="premium_turnover", source_url=FA73061,
+            circular_ref="NSE/FA/73061 (2026-02-27), wef 2026-03-01",
+            verification="verified", estimated=False,
+            provenance="FA73061 'Revised': Equity Options (on premium) Rs 3,552.99 per "
+                       "crore each side, applicable wef March 1, 2026 = 0.0355299%."),
+        # ---- NSE IPFT contribution, each side, on traded premium ----
+        OptionsChargeRegime(
+            "ipft", "premium_pct", 0.000000001, "2021-01-01", "2023-03-31",
+            basis="premium_turnover", source_url=FA56129,
+            circular_ref="NSE/FA/56129 (2023-03-24) 'existing' IPFT level",
+            verification="verified", estimated=False,
+            provenance="FA56129: IPFT 'existing Rs.0.01 per crore of the traded value "
+                       "(premium value)' before the 2023-04-01 recalibration."),
+        OptionsChargeRegime(
+            "ipft", "premium_pct", 0.000005, "2023-04-01", "2026-02-28",
+            basis="premium_turnover", source_url=FA56129,
+            circular_ref="NSE/FA/56129 (2023-03-24), wef 2023-04-01",
+            verification="verified", estimated=False,
+            provenance="FA56129 recalibrated IPFT to Rs.50 per crore of traded premium "
+                       "wef 2023-04-01; FA73061 confirms 'existing Rs 50 each side'."),
+        OptionsChargeRegime(
+            "ipft", "premium_pct", 0.000000001, "2026-03-01", None,
+            basis="premium_turnover", source_url=FA73061,
+            circular_ref="NSE/FA/73061 (2026-02-27), wef 2026-03-01",
+            verification="verified", estimated=False,
+            provenance="FA73061 rolled IPFT back to Rs.0.01 per crore (pre-April-2023 "
+                       "level) wef 2026-03-01; 'Revised' column Rs 0.01 each side."),
+        # ---- SEBI turnover fee (non-debt securities), each side ----
+        OptionsChargeRegime(
+            "sebi", "premium_pct", 0.000001, "2015-04-01", None,
+            basis="premium_turnover", source_url=NSE_LEVIES,
+            circular_ref="SEBI turnover fee, NSE published levies schedule",
+            verification="verified", estimated=False,
+            provenance="NSE levies page: SEBI turnover fee for securities other than debt "
+                       "'0.0001 per cent of the price ... (Rs.10 per crore)' = 1e-6."),
+        # ---- Stamp duty on a derivatives trade, buyer side ----
+        OptionsChargeRegime(
+            "stamp_duty", "premium_pct", 0.00003, "2020-07-01", None, side="buy",
+            basis="premium_turnover", source_url=NSE_STAMP,
+            circular_ref="Finance Act 2019 / Indian Stamp Act, wef 2020-07-01",
+            verification="verified", estimated=False,
+            provenance="NSE stamp page: 'Derivatives - Equity Options 0.003% Buyer' "
+                       "(Finance Act 2019, levied wef July 1, 2020) = 3e-5."),
+        # ---- GST on the taxable fee base (config tax knob, not strictness-gating) ----
+        OptionsChargeRegime(
+            "gst", "fee_pct", 0.18, "2015-04-01", None, basis="fee_base",
+            circular_ref="GST on financial services (18%); no charge-circular carries it",
+            verification="config", estimated=True,
+            provenance="18% GST on the taxable fee base (brokerage + exchange txn + IPFT "
+                       "+ SEBI). Standard rate applied from IndiaOptionsCosts.gst_pct; not "
+                       "sourced from a charge circular this pass, so documented as a "
+                       "config knob and excluded from the strict statutory gate."),
     )
 
 
@@ -176,7 +333,9 @@ class IndiaOptionsCosts:
 
     Charges are computed on the premium turnover ``premium x lot_size x lots`` and are
     applied to the entry and exit legs separately, with partial exits supported.  GST is
-    18% on brokerage + exchange + SEBI, matching the equity model's taxable base.
+    18% on the taxable fee base (brokerage + exchange transaction charge + NSE IPFT +
+    SEBI turnover fee); it is a configurable tax knob, so ``gst_pct`` is applied by the
+    engine and is not a strictness-gating statutory rate.
     """
 
     brokerage: BrokerageConfig = field(default_factory=BrokerageConfig)

@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-05 (P0 + P1 + P2 complete; final reconciliation audit done — authoritative test count 495)
+Last updated: 2026-11-05 (P0 + P1 + P2 + P2.1 complete; final reconciliation audit done — authoritative test count 508 after the P2.1 financial-accuracy audit)
 Verified by direct inspection of the working tree and of the real data files — not from
 prior progress reports or provider marketing pages.
 
@@ -60,7 +60,8 @@ see `DATA_FEASIBILITY_REPORT.md` for the verdict and the field-by-field classifi
 10 passed, 1 skipped in 11.21s   (P1 close-out re-run — tree still green)
 300 passed, 1 skipped in 20.53s  (T9 — `logs/pytest_t9.txt`)
 478 passed, 0 skipped in 196.44s (P2 stage 7 — superseded by the line below)
-495 passed, 0 failed, 0 skipped in 84.78s  (P2 stage 8 + final reconciliation — AUTHORITATIVE, `logs/pytest_p2.txt`)
+495 passed, 0 failed, 0 skipped in 84.78s  (P2 stage 8 + final reconciliation — superseded by the line below, `logs/pytest_p2.txt`)
+508 passed, 0 failed, 0 skipped in 87.41s  (P2.1 financial-accuracy audit — AUTHORITATIVE, `logs/_p21_full_suite.log`)
 ```
 
 Invoke it as `pytest` or `python -m pytest tests` from the repo root. Both are verified
@@ -73,8 +74,8 @@ collection errors. **No file under `vendor/` was modified.**
 Skip history: the single long-standing skip (`test_bracket_stop_target_and_risk_reward` —
 `orders_12` produced no fresh BUY at the end of the 3-symbol smoke sample) was **eliminated
 in P2 stage 7** by a deterministic conftest fixture; the suite has been at **zero skips**
-since. The 478 → 495 step is the 17 Stage-8 readiness-gate tests being added; no test was
-ever removed.
+since. The 478 → 495 step is the 17 Stage-8 readiness-gate tests being added, and 495 → 508 is
+the P2.1 options-cost tests; no test was ever removed.
 
 **Coverage (this was the real gap until T9).** The cost model, brokerage and statutory
 charges, slippage, order fills, stop-loss/target execution, order priority, position
@@ -174,7 +175,7 @@ Findings that bind all later work, in one line each:
 | P1 | Zero-cost NIFTY options data verification + feasibility report | **Done** — awaiting review |
 | — | Data-accuracy corrections (volume, OI, terminal candle, completeness) + T9 | **Done** — awaiting review (`DATA_ACCURACY_CORRECTIONS.md`) |
 | P2 | Master accuracy remediation + readiness audit (8 stages) | **Done** — `P2_READINESS_AUDIT.md`, 8 atomic commits |
-| — | Source official derivative-charge circulars → flip `transaction_costs_verified` | **Open gate** — options stay modelling-only until then |
+| P2.1 | Financial-accuracy audit of the options charge schedule (premium-turnover basis, official circulars) | **Done** — 11/15 rows verified; `transaction_costs_verified` stays fail-closed on 3 estimated pre-2026 exchange rows |
 | T10 | Full-universe data fetch + 20-strategy research & validation | Outstanding |
 | T11 | Strategy applicability screening → shortlist ~5 → keep ≤3 | Outstanding |
 | — | FastAPI + DB layer + Streamlit dashboard (old plan t8 remainder) | Not started, not authorised |
@@ -182,10 +183,13 @@ Findings that bind all later work, in one line each:
 
 ## Known limitations (honest list)
 
-1. **Options capability is modelling-only, not verified-financial.** P2 added the contract
-   reference, lot/expiry history, OI handling, cost/execution/accounting engines and real
-   1m/5m/15m datasets — but every statutory charge rate is `estimated`, so options results
-   are excluded from strict financial validation. No greeks and no order-book depth exist
+1. **Options capability is modelling-only for pre-2026 dates, verified-financial for the
+   current era.** P2 added the contract reference, lot/expiry history, OI handling,
+   cost/execution/accounting engines and real 1m/5m/15m datasets. P2.1 sourced 11 of 15
+   charge-schedule rows from official NSE circulars / Finance Bill / pages (every
+   *current-era* rate is verified); the three pre-2026 `exchange_txn` rows remain
+   `estimated` (slab convention + inferred NSE/FA/64323 date), so trades on those dates are
+   excluded from strict financial validation. No greeks and no order-book depth exist
    in any permitted source; nothing fabricates them.
 2. **Daily only in practice.** `ResearchConfig.intervals = ["1d"]`. `orders_15` (5m)
    and `orders_16` (30m) are registered but there is no cached intraday data.
@@ -203,10 +207,13 @@ Findings that bind all later work, in one line each:
    the Hugging Face archive is the only one with multi-year 1m option history.
 7. **No 15-minute interval exists at any permitted provider** (Breeze documents
    `1minute/5minute/30minute/1day` only). 15m must be resampled from 1m.
-8. **Option cost model exists but is unverified.** `nifty_quant/engine/options_costs.py`
-   models per-lot derivative charges, STT, SEBI, stamp duty, GST and slippage,
-   effective-dated; the equity `costs.py` remains separate and untouched. Because 0 of 5
-   statutory rates are sourced from cached circulars, every options P&L number carries
+8. **Option cost model is premium-turnover based and largely sourced (P2.1).**
+   `nifty_quant/engine/options_costs.py` models the exchange transaction charge and the NSE
+   IPFT contribution on *premium turnover, each side* (the fabricated `Rs 20 per lot` fee was
+   removed), plus STT (three eras), SEBI, stamp duty, GST and slippage, effective-dated; the
+   equity `costs.py` remains separate and untouched. 11 of 15 schedule rows are sourced from
+   official documents, so a trade dated on/after 2026-03-01 with brokerage excluded or verified
+   carries `strict_verifiable=True`; a trade on an estimated pre-2026 exchange row carries
    `strict_verifiable=False` and must not be presented as a verified financial fact.
 9. **Terminal-bar convention — resolved, no longer open.** Timestamps are
    **open-labelled**: a bar stamped `T` covers `[T, T+1)`, and `15:30` is the
@@ -246,22 +253,26 @@ figure are in **`P2_READINESS_AUDIT.md`**; the fail-closed gate is
   unchanged (accounting extended behind a default-off `symmetric_realized` flag).
 - Dependencies pinned exactly to the validated stack + `requirements.lock`; env check reports
   13 packages, 0 drift, REPRODUCIBLE.
-- **Test suite: 495 passed, 0 failed, 0 skipped** (`logs/pytest_p2.txt`, reconciliation re-run
-  2026-11-05; 478 at the Stage-7 commit + the 17 Stage-8 readiness tests) — the long-skipped
-  bracket case now runs on a deterministic fixture, which surfaced and fixed a latent NaN-truthy
-  bug in `signals/parsing.py` that had silently dropped every bracket take-profit.
+- **Test suite: 508 passed, 0 failed, 0 skipped** (P2.1 re-run 2026-11-05; 495 at the P2
+  reconciliation + 13 net new options-cost tests for the premium-turnover schedule, every rate
+  boundary, IPFT, the brokerage-verified rule and the recalculated worked example) — the
+  long-skipped bracket case runs on a deterministic fixture, which earlier surfaced and fixed a
+  latent NaN-truthy bug in `signals/parsing.py` that had silently dropped every bracket take-profit.
 - **Readiness verdict:** qualified for **research modelling** within the cached archive; **not**
   qualified for strict financial use because the single open gate is `transaction_costs_verified`
-  (0 of 5 statutory derivative rates are sourced from cache, so options trades are excluded).
+  (P2.1 sourced 11 of 15 rows and every current-era rate, but the three pre-2026 `exchange_txn`
+  rows stay `estimated`, so the fail-closed gate remains open for the full horizon).
 
 ## Four-way status distinction (final reconciliation, 2026-11-05)
 
-1. **Engineering implementation: complete.** All P2 subsystems built, tested (495 tests) and
-   committed as 8 atomic stage commits plus the reconciliation commit (see `git log --oneline`).
+1. **Engineering implementation: complete.** All P2 subsystems built, tested (508 tests after
+   the P2.1 financial-accuracy audit) and committed as 8 atomic stage commits plus the
+   reconciliation and P2.1 commits (see `git log --oneline`).
 2. **Research modelling: permitted** within the cached archive under the stated exclusions
    (estimated costs excluded from strict use, OI always an estimate, coverage ceilings honoured).
-3. **Strict financial validation: blocked** — `transaction_costs_verified` open (0 of 5
-   statutory derivative rates sourced); the fail-closed gate refuses qualification.
+3. **Strict financial validation: blocked** — `transaction_costs_verified` open (P2.1 sourced
+   11 of 15 rows and every current-era rate, but three pre-2026 `exchange_txn` rows stay
+   estimated); the fail-closed gate refuses full-horizon qualification.
 4. **Strategy validation: not yet completed** — no options strategy has run the validation
    gate; the equity smoke run's 0-of-6 is a scope artefact, not a quality verdict.
 

@@ -139,8 +139,19 @@ source can extend NIFTY options **intraday** history beyond the cached archive (
 reported `UNKNOWN` / `MISSING` and left unavailable — never extended, back-filled or substituted.
 
 **Derivative charge rates** (`data/reference/options_charge_schedule.csv`, `scripts/_p2_cost_schedule_audit.py`,
-`logs/p2_options_cost.txt`): a full offline scan of the cached `FAOP*.pdf` circulars and
-`contract_specs.html` found **0 of 5** statutory rates (STT / exchange / SEBI / stamp). All five are
-carried as `estimated=True` public statutory values with provenance, and — per the directive — every
-trade using them is **excluded from strict financial validation** (the `transaction_costs_verified`
-readiness gate stays open until a sourced circular is added).
+`logs/p2_options_cost.txt`): **P2.1** replaced the earlier fabricated `Rs 20 per lot` exchange fee with
+charges on *premium turnover*, each rate read at ₹0 from an official document (fetched by
+`scripts/_p21_charge_sources.py` into `data/raw/p21_charges`; verbatim excerpts in `logs/p21_excerpts_*.txt`):
+NSE circular **FA73061** (wef 2026-03-01 — Equity Options on premium Rs 3,552.99/cr transaction charge +
+Rs 0.01/cr NSE IPFT, each side; total unchanged at Rs 3,553/cr), **FA56129** (wef 2023-04-01 — slab rates
+per lakh of premium and the IPFT recalibration Rs 0.01→Rs 50/cr), the **Finance (No.2) Bill 2024 cl.155**
+(option-sale STT 0.0625% of premium → 0.10% wef 2024-10-01) and the **NSE STT / levies / stamp pages**
+(STT 0.15% wef 2026-04-01 and 0.10% upto 2026-03-31, seller on premium; exercised-option STT purchaser on
+intrinsic value; SEBI turnover fee 0.0001% = Rs 10/cr; stamp duty Derivatives–Equity Options 0.003% buyer).
+**11 of 15 rows are `verified`** and every *currently in-force* core rate is sourced; the 3 pre-2026
+`exchange_txn` rows stay `estimated` (FA56129 first-marginal-slab convention — a member's slab is unknowable
+for a research book — and the flat Rs 3,503/cr era's effective date is *inferred* because NSE/FA/64323's PDF
+returned 404 at ₹0), plus the GST config knob. So the `transaction_costs_verified` readiness gate stays
+fail-closed for *full-horizon* strict validation, while trades dated on/after 2026-03-01 are strict-verifiable
+per-trade (brokerage excluded or verified). The pre-P2.1 schedule is preserved verbatim in
+`data/reference/options_charge_schedule_superseded.csv` for auditability.
