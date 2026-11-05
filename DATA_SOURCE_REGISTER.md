@@ -8,7 +8,8 @@ provider's marketing page: the `Status` column describes what was **observed**, 
 Written at P1 (2026-11-04), units and lot rows refreshed by the data-accuracy corrections
 (2026-11-05), free-source assessment and readiness audit added at P2 (2026-11-05). Companion
 documents: `DATA_FEASIBILITY_REPORT.md`, `DATA_ACCURACY_CORRECTIONS.md` (conclusions),
-`P2_READINESS_AUDIT.md` (P2 gate + 13-part acceptance), `PROJECT_STATUS.md` (repository state).
+`P2_READINESS_AUDIT.md` (P2 gate + 13-part acceptance + §14 reconciliation appendix),
+`PROJECT_STATUS.md` (repository state).
 
 ## Rules this register enforces
 

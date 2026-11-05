@@ -9,17 +9,20 @@ the operational knowledge a new session needs to not break things. For P2 specif
 ## Resume point
 
 **Completed:** T1–T8 (platform + verdict-gated signal engine), P0 (git baseline + docs),
-P1 (zero-cost NIFTY options data verification → `DATA_FEASIBILITY_REPORT.md`), and the
-data-accuracy corrections milestone (volume/OI/terminal-candle/completeness + T9).
-**Awaiting:** user review of the milestone report (`DATA_ACCURACY_CORRECTIONS.md`) and
-the refreshed `DATA_FEASIBILITY_REPORT.md` limitations.
-**Not started, and not authorised:** P2 full ingestion, T10 (full-universe research run),
-T11 (strategy selection), 5m/15m candle production beyond strict-validated blocks,
-dashboard/API/DB, options backtest engine, live trading.
+P1 (zero-cost NIFTY options data verification → `DATA_FEASIBILITY_REPORT.md`), the
+data-accuracy corrections milestone (volume/OI/terminal-candle/completeness + T9), and
+**P2 (master accuracy remediation + readiness audit, 8 atomic stages)** — ingestion,
+1m/5m/15m candle datasets, options cost/execution/accounting engines and the fail-closed
+readiness gate all exist and are tested.
+**Awaiting:** user review of `P2_READINESS_AUDIT.md` and the final reconciliation before any
+new milestone starts.
+**Not started, and not authorised:** T10 (full-universe research run), T11 (strategy
+selection), options *strategy validation* runs, dashboard/API/DB, strategy optimisation,
+live trading.
 
-The hard gate agreed with the user: **do not build ingestion, options backtesting,
-optimisation, dashboard or broker integration until the reports are reviewed.** They are
-written; the gate still stands until the review happens.
+The hard gate agreed with the user was lifted for P2 only (the P2 plan was approved and
+implemented). It **still stands** for everything else: no optimisation, dashboard, broker
+integration or live trading until the reports are reviewed.
 
 ## Non-obvious operational facts
 
@@ -206,12 +209,11 @@ The corrections changed one premise: the archive's units, lot mapping, timestamp
 convention and gap vocabulary are now **measured and pinned by tests**, so P2 is a scoping
 decision rather than an exploration:
 
-1. If approved, run P2 ingestion through the existing layer — `nifty_quant.derivatives`
-   already does dedup-free raw preservation, the `2025-01-01` OI rescale labelled as an
-   estimate, per-row historical lots with a date-regime fallback, the daily-bhavcopy
-   end-of-day join behind the 15:30 visibility gate, and strict session validation. What
-   P2 adds is breadth (more expiries/symbols), not new logic. An **options** cost model
-   still has to be written: `costs.py` is equity-only.
+1. P2 ingestion ran through the existing layer as planned (8 stages, complete). The
+   **options** cost model that was missing then now exists as
+   `nifty_quant/engine/options_costs.py` (equity `costs.py` untouched); its statutory rates
+   are all `estimated`, so the open work is sourcing official charge circulars into
+   `data/reference/options_charge_schedule.csv` to flip `transaction_costs_verified`.
 2. T10 full-universe daily run to get honest equity baselines.
 3. T11 screening and deep validation. Do not shortlist before T10.
 
@@ -261,7 +263,8 @@ Any OI-based intraday signal stays restricted to independently verified observat
   official derivative-charge circulars into `data/reference/options_charge_schedule.csv` (flip those
   rates to `estimated=False`), otherwise options stay modelling-only.
 - **Determinism contract.** The suite must pass from repo root, from `tests/`, bare `pytest` and
-  `python -m pytest` alike (478 tests) — `tests/conftest.py` pins the repo root onto `sys.path` and
+  `python -m pytest` alike (495 tests; 478 at the Stage-7 commit + 17 Stage-8 readiness tests) —
+  `tests/conftest.py` pins the repo root onto `sys.path` and
   now carries the `bracket_*` deterministic fixtures. Do not reintroduce a data-dependent skip.
 - **Pinned stack.** `requirements.lock` is the reproducible contract (python 3.12.10, pandas 3.0.1,
   numpy 2.4.3, pyarrow 25.0.1, scipy 1.17.1, pytest 9.1.1); verify with `python
@@ -269,3 +272,21 @@ Any OI-based intraday signal stays restricted to independently verified observat
 - **Do not overclaim.** OI is always an estimate; coverage ceilings and `estimated`/`UNKNOWN` flags
   are reported, never collapsed into false certainty; no EOD look-ahead; equity engine files
   (`costs.py`, `fill_engine.py`) are untouched by design — options code is additive.
+
+## Final reconciliation (2026-11-05) — authoritative state
+
+- **Test count:** 495 passed, 0 failed, 0 skipped (`logs/pytest_p2.txt` re-run). 478 was the
+  Stage-7 count; Stage 8 added 17 readiness tests. No test removed.
+- **Four-way distinction:** engineering implementation **complete**; research modelling
+  **permitted** (cached archive, stated exclusions); strict financial validation **blocked**
+  (`transaction_costs_verified` open, 0 of 5 statutory rates sourced); strategy validation
+  **not yet completed** (no options strategy has run the gate).
+- **Open readiness gates:** exactly one — `transaction_costs_verified`, for 1m, 5m and 15m
+  alike; the other 11 gates pass per resolution (`logs/p2_readiness.txt`).
+- **Coverage figures:** four different percentages circulate (17/313 expiries, 37.81% ceiling,
+  41.82% vs 41.89% missing). They use different denominators and are all correct; the
+  denominator table is in `P2_READINESS_AUDIT.md` §14. Do not "fix" them to agree.
+- **Next recommended milestone:** source official NSE derivative-charge circulars (free,
+  anonymous) into the charge schedule to close the last gate; then T10 equity full-universe
+  run for honest baselines; only afterwards an options strategy validation run. Optimisation,
+  dashboard and live trading remain out of scope.

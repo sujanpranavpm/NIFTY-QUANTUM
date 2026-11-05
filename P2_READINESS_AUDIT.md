@@ -182,10 +182,13 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
 
 ## 11. Full pytest results
 
-- **478 passed, 0 failed, 0 skipped** in 196.44s (`logs/pytest_p2.txt`), from the documented
-  project command at repo root.
+- **495 passed, 0 failed, 0 skipped** in 84.78s (`logs/pytest_p2.txt`, reconciliation re-run
+  2026-11-05), from the documented project command at repo root. The **478** figure quoted at
+  the Stage-7 commit was correct *at that commit*: Stage 8 then added the 17 readiness-gate
+  tests (`tests/test_readiness_gating.py`), taking the suite to 495. Nothing was removed —
+  478 + 17 = 495, the same suite plus the Stage-8 file.
 - Discovery parity confirmed: `pytest`, `python -m pytest` at root, and from `tests/` all collect
-  the identical **478 tests** (the conftest pins the repo root onto `sys.path`).
+  the identical **495 tests** (the conftest pins the repo root onto `sys.path`).
 - The long-`skipped` bracket case `test_bracket_stop_target_and_risk_reward` now runs on a
   deterministic `conftest` fixture (an engineered single golden cross), reaching **zero skips**.
   Building that fixture exposed and fixed a latent bug in `nifty_quant/signals/parsing.py`:
@@ -225,6 +228,53 @@ look-ahead; `vendor/` untouched; no new accounts or subscriptions (₹0); `logs/
 - P2 ingestion is authorised only for non-strict research. The next real step (out of P2 scope) is
   to source official derivative charge circulars to flip `transaction_costs_verified`, or accept
   the estimated-cost exclusion permanently for options strategies.
+
+---
+
+## 14. Reconciliation appendix (final consistency audit, 2026-11-05)
+
+**Test count.** The authoritative count at HEAD is **495 passed, 0 failed, 0 skipped**
+(`logs/pytest_p2.txt`, re-run for this appendix). Documents quoting 478 refer to the Stage-7
+commit, before the 17 Stage-8 readiness tests existed; 478 + 17 = 495 and no test was ever
+deleted. Every report now cites 495.
+
+**Coverage denominators (why four different figures are all correct).**
+
+| Figure | Numerator | Denominator | Meaning |
+|---|---|---|---|
+| 17 of 313 expiries | 17 expiry-level `PRESENT` rows | 313 expiry-level registry rows = 178 exchange-listed (cached bhavcopy, arbiter floor 2024-01-02) + 135 provider-published expiries outside the arbiter window (pre-2024, `UNKNOWN`) | Expiries with a cached provider file *and* an official arbiter |
+| 23 files per resolution | 23 cached provider expiry files on disk (17 arbitrated + 6 pre-2024) | n/a — an inventory, not a ratio | Each cached file is aggregated to 1m/5m/15m → 69 parquet files; the 6 pre-2024 files are built as raw pass-through but stay flagged unverifiable (they supply the 10,708 unverifiable cells) |
+| 37.81% max observed coverage | 25,954 present contract-days (`PRESENT` 21,168 + `PRESENT_WITHOUT_OI` 4,786) | 68,638 exchange-enumerated arbitrated contract-days | Contract-days where the provider actually has candles; `NO_TRADE`, `TRUNCATED_SESSION` and missing rows are not counted as coverage |
+| 41.82% `MISSING_CONTRACT` | 28,754 | 68,753 total registry contract-day rows (68,638 enumerated + 115 aggregated pre-arbiter file-day `UNKNOWN` rows) | Registry-vocabulary share over its own full row set |
+| 41.89% (m5 report) | 28,754 (same numerator) | 68,638 exchange-enumerated official contract-days only | The m5 completeness denominator; identical numerator, narrower denominator |
+
+The two missing-data figures therefore differ **only by denominator**: 28,754 ÷ 68,753 = 41.82%
+vs 28,754 ÷ 68,638 = 41.89%. The registry reconciles against `logs/m5_completeness.json` on the
+exchange-enumerated subset (`reconcile: MATCH`), so neither number was altered to force
+agreement.
+
+**Cost model audit (re-verified at HEAD).** `nifty_quant/engine/options_costs.py` charges on
+premium turnover `|premium| × lot_size × lots`, entry and exit legs separately, partial exits
+prorated. Side applicability matches the schedule: STT sell-only (0.05% to 2024-09-30, 0.1%
+from 2024-10-01), stamp duty buy-only (0.003%), exchange transaction charge ₹20 per lot both
+sides, SEBI 0.0001% both sides; GST 18% on brokerage + exchange + SEBI only (statutory levies
+excluded from the GST base); slippage is an optional configured premium haircut (default 0).
+Brokerage defaults to `model="none"` → ₹0, so no provider is assumed. `resolve_rate` raises
+`UnknownChargeError` when no effective-dated regime covers a date (no silent cross-year
+fallback). All 5 schedule rows carry `estimated=True` with provenance "not present in cached
+NSE circulars" → `strict_verifiable=False` on every trade → the `transaction_costs_verified`
+gate stays **closed**. No rate was invented or upgraded to verified.
+
+**Four-way status distinction (binding for all future work).**
+
+1. **Engineering implementation: complete.** Data layer, reference DB, coverage registry,
+   candle datasets, cost/execution/accounting engines, readiness gate — all built and tested.
+2. **Research modelling: permitted** within the cached archive under the stated exclusions
+   (estimated costs, OI as estimate, coverage ceilings honoured).
+3. **Strict financial validation: blocked** until official derivative-charge circulars flip
+   `transaction_costs_verified` (0 of 5 rates sourced today).
+4. **Strategy validation: not yet completed.** No options strategy has been run through the
+   validation gate; the equity smoke run remains 0-of-6 passing by scope, not by quality.
 
 ---
 
