@@ -26,6 +26,9 @@ from nifty_quant.derivatives.units import (
     UNIT_PROVIDER_OI_EARLY,
     UNIT_PROVIDER_OI_LATE,
     UNIT_SHARE_EQUIVALENT,
+    AmbiguousLotError,
+    contract_lot_for_pnl,
+    mark_verified_oi,
     normalise_units,
     oi_to_share_equivalent,
     share_equivalent_to_contracts,
@@ -273,3 +276,129 @@ def test_normalisation_can_be_reapplied_to_its_own_output_without_drift():
     for column in ("volume", "open_interest", "volume_contracts",
                    "oi_share_equivalent", "oi_scale_estimated", "oi_unit"):
         pd.testing.assert_series_equal(once[column], twice[column], check_names=False)
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 (P2): explicit raw homes, volume conversion provenance,
+# independently-verified OI column, and the contract-level P&L lot guard.
+# ---------------------------------------------------------------------------
+def oi_frame(rows) -> pd.DataFrame:
+    """One contract-day block from ``(clock, converted_oi, official_eod)`` triples.
+
+    ``converted_oi`` is the already-normalised provider OI (share equivalents) and
+    ``official_eod`` is the figure ``attach_official_eod`` would have written (only on
+    the closing bars); hand-building them keeps the verification test free of the join.
+    """
+    return pd.DataFrame([{
+        "trading_day": "2025-06-02", "expiry": "2025-06-29",
+        "strike": 24000, "option_type": "CE",
+        "timestamp": pd.Timestamp(f"2025-06-02 {clock}:00").tz_localize("Asia/Kolkata"),
+        "oi_share_equivalent": converted, "oi_official_eod": eod,
+        "oi_raw": converted, "raw_oi": converted,
+    } for clock, converted, eod in rows])
+
+
+def test_normalise_units_keeps_an_explicit_raw_home_for_volume_and_oi():
+    frame = bars(days=["2025-06-02"], volumes=[7_500.0], oi=[12_345.0])
+    out = normalise_units(frame, LotTable(FLAT_75))
+    # raw_* are the untouched provider values, not the derived share-equivalents.
+    pd.testing.assert_series_equal(out["raw_volume"], frame["volume"], check_names=False)
+    pd.testing.assert_series_equal(out["raw_oi"], frame["open_interest"], check_names=False)
+    # and the volume conversion states its own basis and estimate flag.
+    assert out["conversion_basis"].iloc[0] == out["lot_basis"].iloc[0]
+    assert out["conversion_estimated"].iloc[0] == out["lot_estimated"].iloc[0]
+
+
+def test_a_normalised_frame_defaults_the_verification_columns_to_unverified():
+    out = normalise_units(bars(days=["2025-06-02"], volumes=[7_500.0], oi=[12_345.0]),
+                          LotTable(FLAT_75))
+    assert out["oi_verified_flag"].tolist() == [False]
+    assert np.isnan(out["oi_verified"].iloc[0])
+
+
+def test_oi_is_marked_verified_only_where_the_last_bar_matches_the_official_figure():
+    # 1,000,000 converted on the 15:30 bar equals the official figure within 1%.
+    out = mark_verified_oi(oi_frame([("09:15", 900_000.0, np.nan),
+                                     ("15:30", 1_000_000.0, 1_000_000.0)]))
+    assert out["oi_verified_flag"].tolist() == [True, True]
+    # Verified rows carry the normalised value; nothing new is invented.
+    assert out["oi_verified"].tolist() == [900_000.0, 1_000_000.0]
+
+
+def test_the_last_intraday_bar_decides_verification_not_an_earlier_one():
+    # The 09:15 bar disagrees, the 15:30 (last) bar matches -> the day is verified.
+    out = mark_verified_oi(oi_frame([("09:15", 500.0, np.nan),
+                                     ("15:30", 1_000_000.0, 1_000_000.0)]))
+    assert out["oi_verified_flag"].tolist() == [True, True]
+
+
+def test_a_disagreement_beyond_one_percent_leaves_the_observation_unverified():
+    out = mark_verified_oi(oi_frame([("15:30", 1_100_000.0, 1_000_000.0)]))
+    assert out["oi_verified_flag"].iloc[0] is np.False_
+    assert np.isnan(out["oi_verified"].iloc[0])
+
+
+def test_no_official_arbiter_means_nothing_can_be_verified():
+    out = mark_verified_oi(oi_frame([("09:15", 1_000_000.0, np.nan),
+                                     ("15:30", 1_000_000.0, np.nan)]))
+    assert not out["oi_verified_flag"].any()
+    assert out["oi_verified"].isna().all()
+
+
+def test_marking_verified_never_alters_the_raw_or_normalised_columns():
+    frame = oi_frame([("09:15", 900_000.0, np.nan), ("15:30", 1_000_000.0, 1_000_000.0)])
+    before = frame[["oi_raw", "raw_oi", "oi_share_equivalent"]].copy()
+    out = mark_verified_oi(frame)
+    pd.testing.assert_frame_equal(out[["oi_raw", "raw_oi", "oi_share_equivalent"]], before)
+
+
+def test_a_zero_provider_observation_is_not_verified_against_a_positive_official():
+    # Genuine zero provider OI against positive official is a missing observation,
+    # so it is never promoted to verified.
+    out = mark_verified_oi(oi_frame([("15:30", 0.0, 1_000_000.0)]))
+    assert out["oi_verified_flag"].iloc[0] is np.False_
+
+
+def test_pnl_lot_guard_refuses_a_date_only_fallback_on_a_mixed_lot_date():
+    day = date(2025, 1, 3)
+    table = LotTable(FLAT_75, contract_lots=[
+        ContractLot(day=day, symbol="NIFTY", expiry="2025-01-09", strike=24000,
+                    option_type="CE", lot=75),
+        ContractLot(day=day, symbol="NIFTY", expiry="2025-01-09", strike=24500,
+                    option_type="CE", lot=25)])
+    assert table.observed_lots_on(day) == (25, 75)
+    # A contract with no official row on this date can only be priced from the regime,
+    # which is forbidden when two lots are known to coexist.
+    with pytest.raises(AmbiguousLotError, match="listed lots"):
+        contract_lot_for_pnl(table, day, expiry="2025-02-27", strike=24000,
+                             option_type="CE")
+
+
+def test_pnl_lot_guard_accepts_the_exact_official_row_on_a_mixed_lot_date():
+    day = date(2025, 1, 3)
+    table = LotTable(FLAT_75, contract_lots=[
+        ContractLot(day=day, symbol="NIFTY", expiry="2025-01-09", strike=24000,
+                    option_type="CE", lot=75),
+        ContractLot(day=day, symbol="NIFTY", expiry="2025-01-09", strike=24500,
+                    option_type="CE", lot=25)])
+    res = contract_lot_for_pnl(table, day, expiry="2025-01-09", strike=24500,
+                               option_type="CE")
+    assert res.lot == 25 and res.estimated is False
+
+
+def test_pnl_lot_guard_allows_a_date_fallback_when_only_one_lot_is_listed():
+    day = date(2025, 6, 2)
+    table = LotTable(FLAT_75, contract_lots=[
+        ContractLot(day=day, symbol="NIFTY", expiry="2025-06-29", strike=24000,
+                    option_type="CE", lot=75)])
+    # Only one lot observed, so pricing an unlisted contract from the regime is allowed
+    # (still flagged estimated, but not refused).
+    res = contract_lot_for_pnl(table, day, expiry="2025-07-29", strike=24000,
+                               option_type="CE")
+    assert res.lot == 75 and res.estimated is True
+
+
+def test_pnl_lot_guard_refuses_when_no_board_lot_is_known_at_all():
+    with pytest.raises(AmbiguousLotError, match="no board lot"):
+        contract_lot_for_pnl(LotTable(regimes=()), date(2025, 6, 2),
+                             expiry="2025-06-29", strike=24000, option_type="CE")

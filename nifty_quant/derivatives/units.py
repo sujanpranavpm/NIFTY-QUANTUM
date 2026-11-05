@@ -37,9 +37,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import date, time
 
+import numpy as np
 import pandas as pd
 
-from nifty_quant.derivatives.reference import LotTable, LotResolution, expiry_from_iso
+from nifty_quant.derivatives.reference import (
+    BASIS_DATE_REGIME,
+    LotTable,
+    LotResolution,
+    expiry_from_iso,
+)
 from nifty_quant.derivatives.timestamps import clock_labels
 
 # ---------------------------------------------------------------------------
@@ -60,9 +66,19 @@ OFFICIAL_ARBITER_FLOOR = date(2024, 1, 2)
 
 NSE_SESSION_CLOSE = time(15, 30)
 
+#: Relative tolerance under which a converted provider OI that agrees with the official
+#: end-of-day figure is *independently verified* (``logs/m3_oi_norm.txt`` used 1%).
+OI_VERIFY_TOLERANCE = 0.01
+
 
 class LookAheadError(ValueError):
     """An official end-of-day figure was attached to a bar before the session closed."""
+
+
+class AmbiguousLotError(ValueError):
+    """A contract-level P&L needs a specific board lot but only a date-only fallback
+    is available on a date that listed more than one lot - converting there would price
+    the contract with the wrong lot, so the conversion is refused rather than guessed."""
 
 
 @dataclass(frozen=True)
@@ -134,10 +150,11 @@ def _row_date(ts) -> date:
 # Frame-level normalisation
 # ---------------------------------------------------------------------------
 DERIVED_COLUMNS = (
-    "lot_size", "lot_basis", "lot_estimated",
+    "raw_volume", "lot_size", "lot_basis", "lot_estimated",
     "volume_share_equivalent", "volume_contracts", "volume_integral",
-    "oi_raw", "oi_share_equivalent", "oi_scale_estimated", "oi_contracts",
-    "oi_unit", "units_verified", "unit_provenance",
+    "conversion_basis", "conversion_estimated",
+    "raw_oi", "oi_raw", "oi_share_equivalent", "oi_scale_estimated", "oi_contracts",
+    "oi_unit", "oi_verified", "oi_verified_flag", "units_verified", "unit_provenance",
 )
 
 
@@ -167,9 +184,13 @@ def normalise_units(frame: pd.DataFrame, lot_table: LotTable, *,
             lots.append(lot_table.lot_on(day))
 
     lot_sizes = [res.lot for res in lots]
+    out["raw_volume"] = out[volume_col]
     out["lot_size"] = lot_sizes
     out["lot_basis"] = [res.basis for res in lots]
     out["lot_estimated"] = [res.estimated for res in lots]
+    # Provenance of the volume -> contracts conversion is the lot and how it was known.
+    out["conversion_basis"] = [res.basis for res in lots]
+    out["conversion_estimated"] = [res.estimated for res in lots]
 
     vol = out[volume_col].astype(float)
     contracts = [share_volume_to_contracts(v, lot) if lot and pd.notna(v) else None
@@ -180,6 +201,7 @@ def normalise_units(frame: pd.DataFrame, lot_table: LotTable, *,
 
     oi_conv = [oi_to_share_equivalent(raw, day) for raw, day in
                zip(out[oi_col].astype(float), days)]
+    out["raw_oi"] = out[oi_col]
     out["oi_raw"] = out[oi_col]
     out["oi_share_equivalent"] = [c.value for c in oi_conv]
     out["oi_scale_estimated"] = [c.estimated for c in oi_conv]
@@ -197,6 +219,11 @@ def normalise_units(frame: pd.DataFrame, lot_table: LotTable, *,
             lot_sizes, [res.basis for res in lots],
             [c.basis for c in oi_conv], out["oi_unit"])
     ]
+    # The verification columns are populated by mark_verified_oi(); defaulting them here
+    # means a normalised frame always carries them, and an unverified row stays NaN/False
+    # rather than being absent (so a filter on oi_verified_flag cannot silently pass).
+    out["oi_verified"] = float("nan")
+    out["oi_verified_flag"] = False
     return out
 
 
@@ -285,3 +312,78 @@ def assert_no_eod_leakage(frame: pd.DataFrame, eod_columns=("oi_official_eod",),
             raise LookAheadError(
                 f"{len(bad)} bars carry {name} before {close_iso}; official EOD data "
                 f"must not be visible to intraday decisions")
+
+
+# ---------------------------------------------------------------------------
+# Independent OI verification
+# ---------------------------------------------------------------------------
+def mark_verified_oi(frame: pd.DataFrame, *, eod_column: str = "oi_official_eod",
+                     converted_column: str = "oi_share_equivalent",
+                     tolerance: float = OI_VERIFY_TOLERANCE,
+                     stamp_column: str = "timestamp",
+                     keys: tuple[str, ...] = EOD_JOIN_KEYS) -> pd.DataFrame:
+    """Add ``oi_verified`` / ``oi_verified_flag`` from an independent EOD cross-check.
+
+    A (contract x day) is *independently verified* only when its last intraday converted
+    open-interest observation agrees with the official end-of-day figure within
+    ``tolerance``.  Verified rows repeat the normalised value in ``oi_verified``; every
+    other row stays ``NaN`` so an OI-dependent feature can restrict itself to verified
+    observations instead of trusting the estimate.  The raw and normalised columns are
+    never modified here, and nothing is filled: ``attach_official_eod`` must have run
+    first, otherwise no row carries an official figure and nothing is verified.
+    """
+    out = frame.copy()
+    if eod_column not in out.columns or converted_column not in out.columns:
+        out["oi_verified"] = float("nan")
+        out["oi_verified_flag"] = False
+        return out
+    if "oi_verified" not in out.columns:
+        out["oi_verified"] = float("nan")
+    if "oi_verified_flag" not in out.columns:
+        out["oi_verified_flag"] = False
+    group_keys = [k for k in keys if k in out.columns]
+    if not group_keys:
+        return out
+    clock = pd.to_datetime(out[stamp_column], utc=True, format="mixed")
+    for _, grp in out.groupby(group_keys, sort=False, dropna=False):
+        official = grp.loc[grp[eod_column].notna(), eod_column]
+        if official.empty:
+            continue  # no official arbiter for this contract-day -> stays unverified
+        eod_value = float(official.iloc[-1])
+        # The last bar of the session carries the day's final provider OI observation.
+        grp_clock = clock.loc[grp.index]
+        last_index = grp_clock.idxmax()
+        last_converted = out.loc[last_index, converted_column]
+        if not (np.isfinite(eod_value) and eod_value > 0
+                and pd.notna(last_converted)
+                and abs(float(last_converted) - eod_value) <= tolerance * max(eod_value, 1.0)):
+            continue
+        out.loc[grp.index, "oi_verified"] = out.loc[grp.index, converted_column]
+        out.loc[grp.index, "oi_verified_flag"] = True
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Contract-level P&L lot guard
+# ---------------------------------------------------------------------------
+def contract_lot_for_pnl(lot_table: LotTable, day: date, symbol: str = "NIFTY",
+                         expiry: str | None = None, strike: int | None = None,
+                         option_type: str | None = None) -> LotResolution:
+    """Resolve the lot for a *contract-level realised P&L*, refusing an ambiguous one.
+
+    A date-only lot fallback is safe for a coarse statistic but not for pricing a
+    specific contract: on the 61 mixed-lot dates it is wrong for a minority of
+    contracts.  When the only available basis is the date regime and that date listed
+    more than one lot, this raises instead of silently mispricing the position.
+    """
+    res = lot_table.lot_for(day, symbol, expiry, strike, option_type)
+    if not res.known:
+        raise AmbiguousLotError(
+            f"no board lot is available for {symbol} {expiry} {strike} {option_type} "
+            f"on {day.isoformat()}; a contract-level P&L cannot be priced")
+    if res.basis == BASIS_DATE_REGIME and len(lot_table.observed_lots_on(day, symbol)) > 1:
+        raise AmbiguousLotError(
+            f"{day.isoformat()} listed lots {lot_table.observed_lots_on(day, symbol)}; "
+            f"a date-only fallback must not price a contract-level P&L for "
+            f"{expiry} {strike} {option_type}")
+    return res
