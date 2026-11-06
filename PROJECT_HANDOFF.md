@@ -14,11 +14,28 @@ data-accuracy corrections milestone (volume/OI/terminal-candle/completeness + T9
 **P2 (master accuracy remediation + readiness audit, 8 atomic stages)**, the **P2.1**
 financial-accuracy audit (premium-turnover charge schedule) and the **P2.1.2** follow-up
 (the Sept-2024 uniform-rate circular NSE/FA/64232 sourced; statutory vs all-in
-verification levels separated) — ingestion,
+verification levels separated), the **P2.2.3** common options-buying adapter, the **P2.2.4**
+dataset expansion (265 usable expiries), the **P2.2.5** initial strategy screening (five Tier-1
+candidates on the unchanged adapter — **zero advance**: 4 insufficient evidence, 1 fails screening),
+the **P2.2.5.1** screening-integrity audit (**unapproved ±30% exit band found**; approved = +15%/−8%)
+and the **P2.2.6** corrected-exit replay (approved band restored at config level; classifications
+unchanged), plus the **P2.2.6.1** forensic results reconciliation (artifacts verified consistent;
+the P2.2.6 contradictions were confined to the session-summary layer) and the **P2.2.6.2**
+exit-convention decision & default hardening (approved +15%/−8%, orders_12 +16%/−8%, is now the
+library default via a central per-strategy `EXIT_POLICY`; ±30% pinned historical-only) — ingestion,
 1m/5m/15m candle datasets, options cost/execution/accounting engines and the fail-closed
-readiness gate all exist and are tested.
-**Awaiting:** user review of `P2_READINESS_AUDIT.md` and the final reconciliation before any
-new milestone starts.
+readiness gate all exist and are tested, plus the **P2.2.7** complete data-requirements & readiness
+audit (documentation-only: a master inventory of every dataset the platform needs, a fresh
+file-level coverage audit, a gap/blocker report and a research-readiness matrix).
+**Awaiting:** user review of the **P2.2.7** documents
+(`P2.2.7_DATA_REQUIREMENTS_SPECIFICATION.md`, `P2.2.7_CURRENT_DATA_COVERAGE_AUDIT.md`,
+`P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md`, `P2.2.7_RESEARCH_READINESS_MATRIX.md`) — and of
+`P2.2.6.2_EXIT_CONVENTION_DECISION.md`,
+`P2.2.6.1_RESULTS_RECONCILIATION.md`, `P2.2.6_EXIT_RESEARCH_REPORT.md`
+and `P2.2.5.1_SCREENING_INTEGRITY_AUDIT.md` (the P2.2.6 §10 exit-convention decision was
+**executed in P2.2.6.2** under user authorisation) before any new milestone starts.
+**Explicitly NOT authorised until after review:** external-source discovery, any data download,
+account creation, paid services.
 **Not started, and not authorised:** T10 (full-universe research run), T11 (strategy
 selection), options *strategy validation* runs, dashboard/API/DB, strategy optimisation,
 live trading.
@@ -26,6 +43,208 @@ live trading.
 The hard gate agreed with the user was lifted for P2 only (the P2 plan was approved and
 implemented). It **still stands** for everything else: no optimisation, dashboard, broker
 integration or live trading until the reports are reviewed.
+
+## P2.2.3 — common options-buying adapter (implemented, tested, NOT committed)
+
+Continues from `03a5d27` (P2.2.2.1 reconciliation). Adds `nifty_quant/options/` — a
+reusable pipeline that turns the **daily signals of the five Tier-1 long-only strategies**
+(`orders_12`, `orders_01`, `orders_18`, `orders_05`, `orders_07`) into NIFTY
+options-buying **trade + rejection records**, with **no strategy/engine/cost file edited**
+(`git diff` on tracked files is empty). Full write-up: `P2.2.3_OPTIONS_BUYING_ADAPTER.md`.
+
+DTE ruler (the discrepancy P2.2.2.1 left open) is settled: the **index-session series
+(1,262 days, 2021-05-24..2026-07-02)** is the DTE ruler; the official expiry calendar only
+covers 2024+ and collapses pre-2024 expiries to DTE 0. The two agree on 99/99 in the 2024+
+overlap. **MIN_DTE=2 measured at the entry session D+1 → 121 eligible entry days**
+(84 dev / 18 val / 19 holdout); only **13 are actually executable** because the option data
+is sparse — reported honestly, no winners declared.
+
+Run (15m, three P2 scenarios): **39 trade rows (13 unique entries x 3) + 127 rejections**;
+all `FILLED`, `option_type` CE only (long-only strategies), `dte_at_entry ∈ {2,4,5,6}`,
+`brokerage_excluded=True` on all, `statutory_verified` on 21/39 (2024+), `all_in_verified`
+on 0. Rejections dominated by `NO_OPTION_BARS_ON_ENTRY` (116). Persisted to `artifacts/p223/`.
+
+Tests: `tests/test_options_adapter.py` = **17 passed** (all 10 required areas + 2 real-data
+integration smokes). Full repo-root suite = **533 passed** (516 baseline + 17, 0 fail/skip).
+
+Operational facts for a fresh session:
+1. Signals come from `index_daily_signals`, which runs each strategy through the real
+   `run_backtest` with `initial_capital=10,000,000` — capital is a **quantity knob only**
+   (the crossover/breakout decision is price-driven); with the default 100k NAV an ~20k
+   index sizes to 0 shares and the strategy never goes long, so no signal would appear.
+2. `strike_interval` has no effective-dated record before 2024 → selection falls back to a
+   **data-implied grid** (min gap between traded strikes) and flags
+   `strike_interval_source=data_implied`. Never a guessed spec.
+3. Conservative liquidity floor is unit-aware (`lot_size x lots` share-equivalents); the
+   preset `1.0` means one share and is not a tradable exit.
+4. Re-run the evidence: `$env:PYTHONPATH='.'; python scripts/_p223_run_adapter.py`.
+
+## P2.2.5 — initial strategy screening (complete, tested, NOT committed)
+
+Continues from the **P2.2.4** expanded working tree (265 usable expiries, dense option calendar).
+Screens the same five Tier-1 candidates through the **unchanged, audited adapter** and evaluates
+them strictly against the pre-registered `P2.2_BACKTESTING_METHODOLOGY.md` (fixed periods, §3
+floors, §4 metrics, §5 scenario/sign-stability, §6 statistics, §2 walk-forward, §9 baselines, §10
+decision rule). Harness: `scripts/_p225_screen.py`; report: `P2.2.5_INITIAL_SCREENING_REPORT.md`.
+
+**Outcome — zero candidates advance** (this is the methodology's expected result on this sample;
+nothing was forced, no threshold/floor/selection rule changed, holdout read once at the end):
+
+| Candidate | Dev entries (floor 30) | BASELINE Dev+Val exp | Classification |
+|-----------|:---------------------:|:--------------------:|----------------|
+| orders_12 / 01 / 18 | 8 | +₹235.1 | Insufficient evidence (floor unmet; byte-identical signals) |
+| orders_05 | 30 | −₹113.9 | Fails screening (not break-even; sign flips CONSERVATIVE) |
+| orders_07 | 28 | +₹161.3 | Insufficient evidence (misses floor by 2; only sign-stable one) |
+
+Operational facts for a fresh session:
+1. **The binding constraint is now the Development trade-count floor (≥30), not data availability.**
+   Rejections are tiny (19 total) because P2.2.4 made the calendar dense; the next step for an
+   insufficient-evidence candidate is **more data / a denser eligible calendar — never a lowered
+   floor**.
+2. **Naive-ATM hold-to-expiry is the yardstick that matters (§9).** It earns **+6.06%/trade** with
+   the *same* contract selection and *no* TP/SL; every candidate's fixed ±30% premium TP/SL exits
+   underperform it, so the exits — not the signals — are the weak link. "Advance" must beat *both*
+   no-trade *and* naive-ATM.
+3. **Statistics are honestly under-powered:** 0/22 reliable walk-forward OOS folds (no fold reaches
+   ≥5 trades), no PSR/DSR ≥ 0.95, BH q = 1.0 across all. Non-significance at these counts is the
+   expected, reported outcome — do not "engineer" it away.
+4. **`orders_12`, `orders_01`, `orders_18` emit a byte-identical signal set** on the
+   single-instrument daily-signal harness — indistinguishable under this screening (not a bug).
+5. All figures **statutory-only, brokerage-excluded** (`all_in_verified` 0/363); never titled "net
+   profit". Reproduce: `$env:PYTHONPATH='.'; python scripts/_p225_screen.py` (gitignored outputs
+   under `artifacts/p225/`, `logs/p225_screen.{txt,json}`). **Full suite still 533 passed** — no
+   library code was touched. **Not committed — awaiting review.**
+
+## P2.2.5.1 + P2.2.6 — the exit-convention defect and the corrected replay (NOT committed)
+
+**The most important non-obvious fact in this repo right now:** the adapter's default
+`ExitConvention` in `nifty_quant/options/pipeline.py` is **±30%/30%**, but the *approved* methodology
+(design §L168-170/L248; reconciliation §3.4/§5) is **TP +15% / SL −8%**, ratio-preserving
+(`orders_12` → +16%/−8%). The ±30% default was substituted at the P2.2.3 implementation step without
+approval and used in P2.2.5. The P2.2.5.1 audit documented it; **P2.2.6 replayed the screening under
+the approved band via a config-level override only** (`AdapterConfig(exit=ExitConvention(...))` —
+the library default was still ±30% at that time, deliberately left for the user's §10 decision).
+Do not treat P2.2.5's ±30% figures as the approved-methodology results.
+*(Superseded on two points by **P2.2.6.2** below: the library default is now the approved band,
+and the §10 decision has been executed — the rest of this section stands.)*
+
+Key results of the corrected replay (`scripts/_p226_exit_replay.py` → `artifacts/p226/`,
+`logs/p226_exit_replay.{txt,json}`; report `P2.2.6_EXIT_RESEARCH_REPORT.md`):
+
+1. **Classifications unchanged — zero advance** (12/01/07/18 insufficient evidence, 05 fails), but
+   the gate *inputs* moved: under +15/−8 **no candidate is break-even on BASELINE** (as-run ±30% had
+   four). Dev+Val expectancy ₹: −66.4 / −97.6 / −97.6 / −122.4 / −79.4. The deviation flattered the
+   break-even evidence, not the verdict (the ≥30 Development floor dominates).
+2. **The naive-ATM gate was wrong and is now re-based.** The all-days n=855 series (1,030 distinct
+   entries, one per session, unconditional) matches no candidate's signal dates; keep it only as a
+   market-behaviour reference. The **signal-matched hold-to-expiry** (identical entries/contracts/
+   costs, only the exit rule = `ExitRules()`) is the like-for-like bar — and it **dominates both
+   TP/SL bands on every candidate** (+13.7%…+25.9% per trade). Any future exit discussion should
+   start from this, not from the all-days number.
+3. **Replay hygiene that must survive:** P2.2.5 artifacts under `artifacts/p225/` are preserved
+   verbatim — the replay reads them (entry-set sym-diff vs as-run = 0 verified) and writes only to
+   `artifacts/p226/`. `orders_12` runs in a **separate adapter invocation** with its ratio-preserving
+   +16/−8 convention, the other four with +15/−8, results concatenated — that is how the per-strategy
+   approved band is applied without touching library code.
+4. **The holdout is no longer pristine.** It was disclosed in P2.2.5 §9; corrected holdout rows are
+   labelled **supplemental** and must never be used as confirmation or to select anything.
+5. **Open user decision (P2.2.6 report §10):** adopt +15%/−8% going forward, retro-ratify ±30%, or
+   amend the exit structure (e.g. hold-to-expiry primary). Until decided, every report must state
+   which band produced it. *(Decided and executed in P2.2.6.2 — option 1, adopted; every report
+   must still state its band.)*
+6. Evidence scripts: `scripts/_p2251_audit.py` (audit) and `scripts/_p226_exit_replay.py` (replay),
+   both run in ~1–2 min at ₹0 with `$env:PYTHONPATH='.;scripts'`.
+
+## P2.2.6.1 — forensic reconciliation of the summary-layer contradictions (NOT committed)
+
+The P2.2.6 *chat summary* (not its report/artifacts) claimed a +15%/−15% band, PF≥1.1/1.3
+"gates", "orders_12 → Advances" and a +11,060 hold figure. `scripts/_p2261_reconcile.py`
+recomputed every headline metric **independently from the raw per-trade rows** (own metric
+implementations; read-only; no helper imports; no adapter re-run) and proved the artifacts
+self-consistent: **0 mismatches** vs every published table, per-row `net == gross − costs`
+identity with 0 violations, **no negative PF anywhere** (PF = Σwins/Σ|losses| is
+non-negative by construction — the "−24 PF" line conflated PF with an ₹ expectancy), no
++15%/−15% config exists in any `summary.json`/payload/script/artifact name, and
+exit-comparison entry-set identity holds (sym-diff 0, quantities identical, all five
+candidates). Classification re-derived from raw rows = identical to both published decision
+sets: **zero advance**. Operational lessons: (a) ₹- and premium-denominated expectancy use
+different denominators and can legitimately have opposite signs — the §5 break-even gate
+reads **expectancy_net (₹)**; (b) 5m is sensitivity-only and must never be quoted as a
+decision basis; (c) session summaries must be regenerated from `logs/p2261_reconcile.txt` /
+the report files, never from memory. Report: `P2.2.6.1_RESULTS_RECONCILIATION.md` (one
+clean table per configuration + final classification + contradicted-claims register);
+outputs `logs/p2261_reconcile.{txt,json}`. All original artifacts preserved; no thresholds
+or strategy code touched; no winner declared.
+
+## P2.2.6.2 — exit-convention decision executed; approved band is now the DEFAULT (NOT committed)
+
+User-authorised: (1) **+15%/−8% is the default** options research exit convention;
+(2) **orders_12 keeps +16%/−8%** (ratio-preserving); (3) **±30%/30% is historical-only**;
+(4) **hold-to-expiry stays a research benchmark, never a default**. Implemented in
+`nifty_quant/options/pipeline.py` (the only library files touched; exports in
+`options/__init__.py`):
+
+1. `ExitConvention` defaults are now `stop_fraction=0.08, target_fraction=0.15` with
+   construction-time validation (NaN/inf/negative/non-numeric/bool → `ValueError`;
+   `max_hold_bars<=0` → `ValueError`). An empty strategy set in `run()` is rejected.
+2. **`EXIT_POLICY`** (central dict) + `approved_exit_for(sid)`: orders_12 → +16/−8; the other
+   four Tier-1 → +15/−8; unknown id → fail-closed `ValueError`. `AdapterConfig.exit` is now
+   `Optional`, default `None` = "apply the policy per strategy"; an explicit convention
+   overrides the policy for all selected strategies. `_record_signal` resolves via
+   `config.exit_for(sid)` — **future multi-strategy runs band orders_12 automatically**; the
+   P2.2.6 two-invocation workaround is no longer required (the replay script still uses it —
+   harmless and left untouched for artifact fidelity).
+3. Run `summary["exit_convention"]` keeps the old flat-dict shape when every strategy shares
+   one band (so `_p226_exit_replay`'s assertion and historical summary readers stay
+   compatible), switches to `{"per_strategy": …}` when they differ, and adds
+   `exit_convention_per_strategy` / `exit_policy_applied`.
+4. **Historical reproducibility:** `_p223_run_adapter.py`, `_p2231_audit.py`,
+   `_p224_reconcile.py`, `_p225_screen.py` now carry `HISTORICAL_EXIT =
+   ExitConvention(0.30, 0.30)` pinned on every adapter invocation ("do not update" comments);
+   `_p2251_audit.py`'s `asrun_exit` made explicit. No artifact regenerated — p223–p226
+   mtimes all predate this milestone; nothing was re-run; classifications and verdicts are
+   untouched (zero advance still — the default change is plumbing, not evidence).
+5. Tests: +6 in `tests/test_options_adapter.py` (approved default, central policy incl.
+   orders_12 exception, explicit ±30% override still works, fail-closed invalid values and
+   unknown ids, empty strategy set). **Full suite 539 passed** (`logs/_p2262_fullsuite.log`).
+   Decision record: `P2.2.6.2_EXIT_CONVENTION_DECISION.md`.
+
+## P2.2.7 — complete data-requirements & readiness audit (documentation-only, NOT committed)
+
+Establishes **exactly what data the platform needs** before any new source is searched or
+downloaded. Pure documentation; the **only** code added is the **read-only** helper
+`scripts/_p227_data_audit.py` → `logs/_p227_data_audit.log` (introspects schemas/counts/date spans;
+**never writes `data/`**). It was added (rather than an inline `python -c`) because PowerShell mangles
+long multi-line `-c` (operational fact #4) and so the Phase-4 counts are reproducible. Because a file
+under `scripts/` changed, the full repo-root suite was re-run: **556 passed** (unchanged from P2.2.6.2
+— no test or library code touched).
+
+Four deliverables: (1) `P2.2.7_DATA_REQUIREMENTS_SPECIFICATION.md` — master inventory of categories
+A–G, each dataset with fields/purpose/consumers/resolution/history/accuracy/sourced-vs-calculated/
+one of **7 requirement classes**/dependencies/if-missing, plus governance rules H1–H5 and the explicit
+Monte Carlo clarification (10,000 iterations = repetitions of a resample of the finite observed set,
+**not** 10,000 market observations). (2) `P2.2.7_CURRENT_DATA_COVERAGE_AUDIT.md` — every file re-measured
+fresh (see the corrected counts below), six-way status per requirement. (3)
+`P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md` — per-capability absolute blockers vs quality improvements.
+(4) `P2.2.7_RESEARCH_READINESS_MATRIX.md` — GREEN/AMBER/RED-DATA/RED-CONSTRAINT/N-A per capability.
+
+**Counts corrected by this audit (older docs are stale — do NOT reuse them):**
+
+- The provider archive is now a **dense 267-expiry set** (2021:31, 2022:52, 2023:52, 2024:52, 2025:52,
+  2026:28), **not** the "23-file sample" still written in `P2.2_DATA_FEASIBILITY_REPORT.md`.
+- `data/derived/candles` = **801 = 267 × {1m,5m,15m}** (no 60m/30m produced).
+- Registry `nifty_coverage_registry.csv` = **181,973 rows**; arbiter-verified only **2024+** (contract-day
+  cells 2021/22/23 = 345/492/532 are **all `UNKNOWN`, arbiter=0**); `PRESENT` 77,627; ~37.81% coverage ceiling.
+- `IDX_NSEI` 4,133 daily verified; full NIFTY50 daily **not fetched**; `nifty50_snapshot.csv` has empty
+  membership dates → `survivorship_bias_exposed=True`.
+
+**Key blockers established (for the next decision, not acted on here):** bid/ask/spread/depth, observed
+IV/Greeks/VIX and full-horizon strict financial validation are **hard/impossible at ₹0**; the real
+liquidity gate + `SttlmPric` settlement wiring are **behaviour** fixes (present data, deferred by the
+no-execution-change rule); denser option history and a future-authorised full-universe + PIT fetch (T10)
+are the ₹0-closable levers. Negative grep confirmed no module reads VIX/participant/FII/bid/greeks/macro —
+so those absences are facts, not oversights. **Nothing committed; await review before external-source
+discovery or any download.**
 
 ## Non-obvious operational facts
 
@@ -273,7 +492,7 @@ Any OI-based intraday signal stays restricted to independently verified observat
   `NSE/FA/64323`: that is a circular-reference mismatch, likely a typographical error, for the
   primary circular `NSE/FA/64232` (dated September 27, 2024), now sourced.
 - **Determinism contract.** The suite must pass from repo root (`pytest` / `python -m pytest tests`)
-  with **zero skips** (516 tests after P2.1.2; 508 after P2.1; 495 at the P2 reconciliation) —
+  with **zero skips** (539 tests since P2.2.6.2; 533 at P2.2.3–P2.2.6.1; 516 after P2.1.2; 508 after P2.1; 495 at the P2 reconciliation) —
   `tests/conftest.py` pins the repo root onto `sys.path` and
   now carries the `bracket_*` deterministic fixtures. From inside `tests/` three disk-anchored
   tests still skip (they read `data/derived`/`logs/` by CWD) — pre-existing, not a regression.
@@ -369,7 +588,8 @@ strict-verifiable"). One atomic commit. At Rs 0.
    `options_accounting`/`options_execution` still gate on it unchanged. Worked example: the 2025
    round trip (150→180, lot 75, 2 lots) is **Rs 48.4865**, now `strict_verifiable=True`; a 2022
    slab-era trade is Rs 16.1886 and fails closed.
-4. **Tests: 516 passed / 0 failed / 0 skipped** from repo root (`logs/_p212_full_suite.log`). +8 new
+4. **Tests: 533 passed / 0 failed / 0 skipped** from repo root (`logs/_p223_fullsuite.log`;
+   was 516 at P2.1.2 in `logs/_p212_full_suite.log`; +17 in `tests/test_options_adapter.py`). +8 new
    over P2.1's 508 (6 in `test_options_costs`, 1 each in `test_options_accounting`/`test_options_execution`):
    the verification-level matrix (statutory vs all-in vs strict) and the FA64232-era/round-trip pins.
    Three older tests that asserted "2025 is estimated" were re-targeted to a slab-era date so their
