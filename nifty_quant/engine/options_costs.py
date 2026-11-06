@@ -1,4 +1,4 @@
-"""Options-specific transaction cost engine (P2 stage 5; P2.1 financial-accuracy audit).
+"""Options-specific transaction cost engine (P2 stage 5; P2.1 / P2.1.2 accuracy audits).
 
 A long index-option trade (buy CE or PE, exit by sell or expiry) is charged on the
 *premium* turnover ``premium x lot_size x lots``, with the entry and exit legs costed
@@ -16,15 +16,31 @@ premium, each side* (NSE circular FA73061, wef 2026-03-01: Rs 3,552.99 + Rs 0.01
 schedule in :func:`nifty_quant.config.default_options_charge_regimes` now carries these
 premium-turnover rates, effective-dated and each read from an official document.
 
+P2.1.2 correction
+-----------------
+FA73061 cites NSE/FA/64323 for the Sept-27-2024 uniform-rate revision, but that PDF
+returns HTTP 404; that is a circular-reference mismatch, likely a typographical error.
+The official primary document located is **NSE/FA/64232** (dated September 27, 2024),
+matching the subject and effective charges referenced by FA73061.  With the real
+circular now cached at Rs 0, the 2024-10-01 exchange
+transaction row is *verified* (Rs 35.03 each side per lakh of premium, wef Oct 1 2024).  The
+pre-Apr-2023 slab VALUES and effective date are now also sourced (NSE/FA/46730), but slab
+-tiers remain a modelling assumption (the applicable marginal tier depends on member monthly
+turnover, which a research book does not have), so the two slab-era rows stay estimated.
+
 Honesty contract
 ----------------
 A rate that could not be read from an official source is flagged ``estimated=True`` in
-the schedule, and :meth:`assess` reports ``strict_verifiable=False`` for any trade that
-used such a rate (fail-closed).  Strict verification additionally requires that
-brokerage be either *excluded* (``model='none'``) or *verified* (``BrokerageConfig.
-verified=True``): an unverified broker fee is charged for modelling but never presented
-as a verified financial fact.  GST is a configurable tax knob applied to the taxable fee
-base, not a strictness-gating statutory rate.
+the schedule, and :meth:`assess` reports ``statutory_verified=False`` for any trade that
+used such a rate (fail-closed).  The result distinguishes two verification levels that
+must not be conflated: ``statutory_verified`` (every statutory rate sourced, brokerage
+irrelevant) and ``all_in_verified`` (statutory_verified *and* brokerage explicitly
+attested against a broker tariff) - a *brokerage-excluded* trade is **never** all-in
+verified because the broker fee is a real trading cost that has simply been omitted.
+``strict_verifiable`` is retained for backward compatibility and means "safe to publish
+as a verified financial fact in this configuration": statutory_verified *and* either
+brokerage excluded or brokerage verified.  GST is a configurable tax knob applied to
+the taxable fee base, not a strictness-gating statutory rate.
 """
 
 from __future__ import annotations
@@ -80,12 +96,46 @@ class OptionsCostResult:
                      if k != "brokerage" and v.startswith("estimated"))
 
     @property
+    def statutory_verified(self) -> bool:
+        """True only when every statutory rate used was independently sourced.
+
+        Does **not** require brokerage to be verified or excluded - this is the pure
+        statutory-levy verification level (P2.1.2 directive §3).
+        """
+        return not any(v.startswith("estimated")
+                       for k, v in self.provenance.items() if k != "brokerage")
+
+    @property
+    def all_in_verified(self) -> bool:
+        """True only when *statutory_verified* **and** the broker fee is attested.
+
+        Brokerage exclusion (``model='none'``) is deliberately NOT all-in verification -
+        the broker fee is a real cost that has been omitted, not verified.  Use this
+        flag when reporting a *fully net* trading cost; a False result with
+        ``statutory_verified=True`` means the statutory side is sourced but the
+        brokerage is either excluded or unverified.
+        """
+        return self.statutory_verified and self.brokerage_verified
+
+    @property
+    def cost_basis(self) -> str:
+        """Human-readable reporting label - never says 'net' when brokerage is excluded."""
+        if not self.statutory_verified:
+            return "modelling only (some statutory rates estimated)"
+        if self.brokerage_verified:
+            return "all-in verified (statutory sourced + brokerage attested)"
+        if self.brokerage_excluded:
+            return ("statutory-only (brokerage excluded; NOT fully all-in net - "
+                    "do not label as net profit)")
+        return "statutory sourced; brokerage configured but unverified"
+
+    @property
     def strict_verifiable(self) -> bool:
-        """True only when every statutory rate used was independently sourced *and* the
-        brokerage is either excluded or verified (directive P2.1 section 4)."""
-        statutory_ok = not any(v.startswith("estimated")
-                               for k, v in self.provenance.items() if k != "brokerage")
-        return statutory_ok and (self.brokerage_excluded or self.brokerage_verified)
+        """Backward-compat verdict: safe to publish as a verified financial fact in
+        this configuration (statutory sourced AND brokerage either excluded or verified).
+        Distinct from :attr:`all_in_verified`, which additionally requires the broker
+        fee to be attested (a brokerage-excluded trade is never fully all-in)."""
+        return self.statutory_verified and (self.brokerage_excluded or self.brokerage_verified)
 
 
 class IndiaOptionsCommission:
@@ -246,5 +296,9 @@ class IndiaOptionsCommission:
             "exit": exit_,
             "total_costs": entry.total + exit_.total,
             "strict_verifiable": entry.strict_verifiable and exit_.strict_verifiable,
+            "statutory_verified": entry.statutory_verified and exit_.statutory_verified,
+            "all_in_verified": entry.all_in_verified and exit_.all_in_verified,
             "brokerage_excluded": entry.brokerage_excluded and exit_.brokerage_excluded,
+            "cost_basis": entry.cost_basis if entry.cost_basis == exit_.cost_basis
+                          else f"mixed: entry [{entry.cost_basis}] / exit [{exit_.cost_basis}]",
         }

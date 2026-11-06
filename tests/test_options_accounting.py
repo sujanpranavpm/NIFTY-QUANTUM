@@ -106,7 +106,7 @@ def test_unrealized_pnl_marks_open_positions_and_skips_unusable_prices():
 # Cost handling
 # ---------------------------------------------------------------------------
 def test_costs_are_assessed_once_and_subtracted_from_realized_net():
-    commission = IndiaOptionsCommission()   # default schedule: every rate estimated
+    commission = IndiaOptionsCommission()   # default schedule (fixture date is sourced-era)
     led = OptionsLedger(100_000.0, commission=commission)
     led.open(CON, LONG, 100.0, 1, 75, DAY, timestamp=t(0))
     led.close(CON, 120.0, 1, DAY, timestamp=t(60))
@@ -118,10 +118,18 @@ def test_costs_are_assessed_once_and_subtracted_from_realized_net():
 
 
 def test_an_estimated_schedule_marks_the_ledger_not_strict_verifiable():
+    # slab-era trade date: its exchange_txn rate stays estimated (slab convention),
+    # so the leg must fail the strict gate closed (P2.1.2: Oct-2024+ dates are sourced)
     led = OptionsLedger(100_000.0, commission=IndiaOptionsCommission())
-    led.open(CON, LONG, 100.0, 1, 75, DAY, timestamp=t(0))
+    led.open(CON, LONG, 100.0, 1, 75, "2022-01-03", timestamp=t(0))
     assert led.strict_verifiable is False
     assert led.summary()["strict_verifiable"] is False
+
+
+def test_a_sourced_era_schedule_keeps_the_ledger_strict_verifiable():
+    led = OptionsLedger(100_000.0, commission=IndiaOptionsCommission())
+    led.open(CON, LONG, 100.0, 1, 75, DAY, timestamp=t(0))
+    assert led.strict_verifiable is True
 
 
 def test_no_commission_keeps_the_ledger_strict_verifiable():

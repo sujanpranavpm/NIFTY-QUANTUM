@@ -169,7 +169,21 @@ def test_pnl_is_monotonic_from_optimistic_to_conservative():
     b = run(bars, rules, scenario=BASELINE, engine=engine)
     c = run(bars, rules, scenario=CONSERVATIVE, engine=engine)
     assert a.net_pnl >= b.net_pnl >= c.net_pnl
-    assert a.strict_verifiable is False    # estimated statutory schedule -> excluded
+    # P2.1.2: the fixture date 2025-01-02 sits in the Oct-2024 sourced era
+    # (FA64232), so with brokerage excluded the trade IS strict-verifiable.
+    assert a.strict_verifiable is True
+
+
+def test_a_slab_era_trade_is_costed_but_not_strict_verifiable():
+    """Fail-closed: a 2022 trade uses the estimated slab convention."""
+    bars = [OptionBar(datetime(2022, 1, 3, 9, 15), 100.0, 101.0, 99.0, 100.0, 1_000_000.0),
+            OptionBar(datetime(2022, 1, 3, 9, 20), 100.0, 104.0, 100.0, 103.0, 1_000_000.0),
+            OptionBar(datetime(2022, 1, 3, 9, 25), 112.0, 121.0, 111.0, 118.0, 1_000_000.0)]
+    engine = OptionsExecutionEngine(commission=IndiaOptionsCommission())
+    r = engine.run(bars, 0, ExitRules(target_premium=120.0), lots=1, lot_size=25,
+                   scenario=BASELINE)
+    assert r.status == FILLED and r.total_costs > 0
+    assert r.strict_verifiable is False
 
 
 def test_run_scenarios_returns_all_three_keyed_by_name():

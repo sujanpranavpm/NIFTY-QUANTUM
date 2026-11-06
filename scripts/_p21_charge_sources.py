@@ -33,16 +33,22 @@ TARGETS = [
      "https://nsearchives.nseindia.com/content/circulars/FA73061.pdf"),
     ("FA64323.pdf",
      "https://nsearchives.nseindia.com/content/circulars/FA64323.pdf"),
+    ("FA64232.pdf",
+     "https://nsearchives.nseindia.com/content/circulars/FA64232.pdf"),
+    ("FA64323_faop.pdf",
+     "https://nsearchives.nseindia.com/content/circulars/FAOP64323.pdf"),
+    ("FA64232_faop.pdf",
+     "https://nsearchives.nseindia.com/content/circulars/FAOP64232.pdf"),
     ("FA56129.pdf",
      "https://nsearchives.nseindia.com/content/circulars/FA56129.pdf"),
+    ("FA46730.pdf",
+     "https://nsearchives.nseindia.com/content/circulars/FA46730.pdf"),
     ("finance_bill_2024_25.pdf",
      "https://www.indiabudget.gov.in/budget2024-25/doc/Finance_Bill.pdf"),
     ("finance_bill_2025_26.pdf",
      "https://www.indiabudget.gov.in/budget2025-26/doc/Finance_Bill.pdf"),
     ("finance_bill_2026_27.pdf",
      "https://www.indiabudget.gov.in/budget2026-27/doc/Finance_Bill.pdf"),
-    ("FA64323_faop.pdf",
-     "https://nsearchives.nseindia.com/content/circulars/FAOP64323.pdf"),
     ("nse_sebi_stt_levies.html",
      "https://www.nseindia.com/static/invest/"
      "first-time-investor-sebi-turnover-fees-stt-other-levies"),
@@ -56,10 +62,10 @@ TARGETS = [
      "equity-derivatives-securities-transaction-tax"),
 ]
 
-KEY = re.compile(r"(crore|IPFT|investor protection|transaction charge|turnover fee|"
+KEY = re.compile(r"(crore|lakh|IPFT|investor protection|transaction charge|turnover fee|"
                  r"turnover charge|securities transaction tax|\bSTT\b|stamp duty|"
                  r"\bSEBI\b|supersession|supersed|0\.0625|0\.15\s*%|0\.1\s*%|"
-                 r"3,?55[0-9]|w\.?e\.?f|with effect)", re.IGNORECASE)
+                 r"3,?[0-9]{3}|w\.?e\.?f|with effect|September 27|option in securities)", re.IGNORECASE)
 REF = re.compile(r"\b(?:NSE/)?(?:FAOP|FA|MRD|CD)\s?/?\s?\d{4,6}\b")
 DATE = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b")
 

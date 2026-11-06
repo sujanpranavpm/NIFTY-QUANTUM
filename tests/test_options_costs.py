@@ -16,8 +16,11 @@ turnover* and added the NSE IPFT contribution, so the tests here pin:
 
 The arithmetic tests use an explicitly *sourced* schedule (estimated=False).  A separate
 group uses the real default schedule to pin the honesty contract per trade date: the
-current era (on/after 2026-03-01) is fully sourced and strict-verifiable, while the
-pre-2026 exchange-transaction rows stay estimated and exclude those trades.
+Oct-2024 and later eras are fully sourced (P2.1.2 verified the 2024-10-01 exchange rate
+from the primary circular NSE/FA/64232), while the two slab-era exchange-transaction
+rows stay estimated and exclude those trades.  A third group pins the P2.1.2
+verification levels: statutory_verified vs all_in_verified must not be conflated -
+brokerage exclusion is never all-in verification.
 """
 
 from __future__ import annotations
@@ -266,6 +269,47 @@ def test_verified_brokerage_permits_strict_verification():
 
 
 # ---------------------------------------------------------------------------
+# P2.1.2 verification levels: statutory vs all-in must not be conflated
+# ---------------------------------------------------------------------------
+def test_brokerage_excluded_is_statutory_verified_but_not_all_in():
+    """Directive §3: omitting the broker fee never makes a cost 'fully all-in net'."""
+    result = IndiaOptionsCommission().assess(150.0, 75, 1, OrderSide.BUY, "2026-03-02")
+    assert result.statutory_verified is True
+    assert result.brokerage_excluded is True
+    assert result.all_in_verified is False
+    assert result.strict_verifiable is True          # publishing-safe in this config
+    assert "brokerage excluded" in result.cost_basis
+    assert "do not label as net profit" in result.cost_basis
+
+
+def test_attested_brokerage_is_the_only_all_in_verified_state():
+    comm = IndiaOptionsCommission(IndiaOptionsCosts(
+        brokerage=BrokerageConfig(model="flat", flat_per_order=20.0, verified=True)))
+    result = comm.assess(150.0, 75, 1, OrderSide.BUY, "2026-03-02")
+    assert result.statutory_verified is True
+    assert result.all_in_verified is True
+    assert result.cost_basis.startswith("all-in verified")
+
+
+def test_unverified_brokerage_is_neither_all_in_nor_publishing_safe():
+    comm = IndiaOptionsCommission(IndiaOptionsCosts(
+        brokerage=BrokerageConfig(model="percentage", percentage=0.001)))
+    result = comm.assess(150.0, 75, 1, OrderSide.BUY, "2026-03-02")
+    assert result.statutory_verified is True         # statutory side fully sourced
+    assert result.all_in_verified is False
+    assert result.strict_verifiable is False
+    assert "unverified" in result.cost_basis
+
+
+def test_slab_era_leg_is_neither_statutory_nor_all_in_verified():
+    result = IndiaOptionsCommission().assess(150.0, 75, 1, OrderSide.BUY, "2023-05-05")
+    assert result.statutory_verified is False
+    assert result.all_in_verified is False
+    assert result.strict_verifiable is False
+    assert result.cost_basis.startswith("modelling only")
+
+
+# ---------------------------------------------------------------------------
 # The honesty contract, per trade date, on the real default schedule
 # ---------------------------------------------------------------------------
 def test_default_schedule_sources_every_in_force_core_rate():
@@ -273,9 +317,15 @@ def test_default_schedule_sources_every_in_force_core_rate():
     core = {"stt", "exchange_txn", "ipft", "sebi", "stamp_duty"}
     live = [r for r in regs if r.component in core and r.effective_to is None]
     assert live and all(not r.estimated for r in live)
-    # the three pre-2026 exchange-txn eras stay estimated (slab convention / inferred date)
+    # P2.1.2: only the two slab-era exchange-txn rows stay estimated (slab convention);
+    # the 2024-10-01 flat era is verified from the primary circular NSE/FA/64232.
     exch_est = [r for r in regs if r.component == "exchange_txn" and r.estimated]
-    assert len(exch_est) == 3
+    assert len(exch_est) == 2
+    assert all(r.effective_to <= "2024-09-30" for r in exch_est)
+    flat_2024 = [r for r in regs if r.component == "exchange_txn"
+                 and r.effective_from == "2024-10-01"]
+    assert flat_2024 and not flat_2024[0].estimated
+    assert "64232" in flat_2024[0].circular_ref
 
 
 def test_a_current_era_leg_is_strict_verifiable_when_brokerage_excluded():
@@ -285,11 +335,19 @@ def test_a_current_era_leg_is_strict_verifiable_when_brokerage_excluded():
     assert result.strict_verifiable is True
 
 
-def test_a_pre_2026_leg_is_costed_but_not_strict_verifiable():
-    result = IndiaOptionsCommission().assess(150.0, 75, 1, OrderSide.BUY, "2025-01-02")
+def test_a_slab_era_leg_is_costed_but_not_strict_verifiable():
+    result = IndiaOptionsCommission().assess(150.0, 75, 1, OrderSide.BUY, "2022-01-03")
     assert result.total > 0
     assert result.strict_verifiable is False
     assert result.estimated_components == ("exchange_txn",)
+
+
+def test_a_post_oct_2024_leg_is_strict_verifiable_after_the_fa64232_source():
+    """P2.1.2: the 2024-10-01 exchange era became verified (primary circular FA64232)."""
+    result = IndiaOptionsCommission().assess(150.0, 75, 1, OrderSide.BUY, "2025-01-02")
+    assert result.total > 0
+    assert result.estimated_components == ()
+    assert result.strict_verifiable is True
 
 
 def test_a_sourced_schedule_leg_is_strict_verifiable():
@@ -322,12 +380,26 @@ def test_worked_example_2026_round_trip_is_strict_verifiable():
     assert trip["strict_verifiable"] is True
 
 
-def test_worked_example_2025_round_trip_is_not_strict_verifiable():
-    """The same trade a year earlier hits the estimated pre-2026 exchange era."""
+def test_worked_example_2025_round_trip_is_strict_verifiable():
+    """P2.1.2: the 2025 trade sits in the Oct-2024 flat era, now sourced from FA64232."""
     trip = IndiaOptionsCommission().round_trip(150.0, 180.0, 75, 2,
                                                "2025-01-02", "2025-01-30")
     assert trip["total_costs"] > 0
+    assert trip["strict_verifiable"] is True
+    assert trip["statutory_verified"] is True
+    # brokerage excluded is NOT all-in verification (the fee is omitted, not sourced)
+    assert trip["all_in_verified"] is False
+    assert "do not label as net profit" in trip["cost_basis"]
+
+
+def test_worked_example_slab_era_round_trip_is_not_strict_verifiable():
+    """A 2022 trade hits the estimated slab convention and stays fail-closed."""
+    trip = IndiaOptionsCommission().round_trip(150.0, 180.0, 25, 2,
+                                               "2022-01-03", "2022-01-27")
+    assert trip["total_costs"] > 0
     assert trip["strict_verifiable"] is False
+    assert trip["statutory_verified"] is False
+    assert trip["cost_basis"].startswith("modelling only")
 
 
 # ---------------------------------------------------------------------------

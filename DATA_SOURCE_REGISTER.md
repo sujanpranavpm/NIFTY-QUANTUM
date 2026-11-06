@@ -148,10 +148,18 @@ per lakh of premium and the IPFT recalibration Rs 0.01→Rs 50/cr), the **Financ
 (option-sale STT 0.0625% of premium → 0.10% wef 2024-10-01) and the **NSE STT / levies / stamp pages**
 (STT 0.15% wef 2026-04-01 and 0.10% upto 2026-03-31, seller on premium; exercised-option STT purchaser on
 intrinsic value; SEBI turnover fee 0.0001% = Rs 10/cr; stamp duty Derivatives–Equity Options 0.003% buyer).
-**11 of 15 rows are `verified`** and every *currently in-force* core rate is sourced; the 3 pre-2026
-`exchange_txn` rows stay `estimated` (FA56129 first-marginal-slab convention — a member's slab is unknowable
-for a research book — and the flat Rs 3,503/cr era's effective date is *inferred* because NSE/FA/64323's PDF
-returned 404 at ₹0), plus the GST config knob. So the `transaction_costs_verified` readiness gate stays
-fail-closed for *full-horizon* strict validation, while trades dated on/after 2026-03-01 are strict-verifiable
-per-trade (brokerage excluded or verified). The pre-P2.1 schedule is preserved verbatim in
-`data/reference/options_charge_schedule_superseded.csv` for auditability.
+**P2.1.2** added the primary circulars **FA64232** (2024-09-27 — Equity Options Rs 35.03 each side per lakh
+of premium = Rs 3,503/cr = 0.03503%, wef 2024-10-01) and **FA46730** (the 2021 slab schedule). FA73061 cites
+the former as `NSE/FA/64323`, whose PDF returns 404; that is a **circular-reference mismatch, likely a
+typographical error**. The official primary document located is `NSE/FA/64232`, dated September 27, 2024,
+matching the subject and effective charges referenced by FA73061; it is now sourced and documented (do not
+re-litigate it as a missing document).
+**12 of 15 rows are `verified`** and every core rate in force from 2024-10-01 is sourced; the **two
+pre-Oct-2024 slab-era** `exchange_txn` rows stay `estimated` (FA46730/FA56129 first-marginal-slab convention —
+the marginal slab a member pays is unknowable for a research book, so this is a permanent unobservable, not a
+missing source), plus the GST config knob. So the `transaction_costs_verified` readiness gate stays
+fail-closed for *full-horizon* strict validation, while trades dated on/after **2024-10-01** are strict-verifiable
+per-trade (brokerage excluded or verified). `OptionsCostResult` now separates `statutory_verified` (all statutory
+rates sourced) from `all_in_verified` (statutory *and* an attested broker fee): excluding brokerage is
+`statutory_verified=True, all_in_verified=False` and is never labelled a net figure. The pre-P2.1 schedule is
+preserved verbatim in `data/reference/options_charge_schedule_superseded.csv` for auditability.

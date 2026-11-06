@@ -165,22 +165,27 @@ def default_options_charge_regimes() -> tuple[OptionsChargeRegime, ...]:
 
     P2.1 replaced the earlier fabricated ``Rs 20 per lot`` exchange fee with charges on
     *premium turnover*, each rate read from an official document cached under
-    ``data/raw/p21_charges`` (fetched by ``scripts/_p21_charge_sources.py``).  Every row
-    carries its ``source_url``, ``circular_ref``, ``basis`` and a ``verification`` status;
-    ``estimated`` stays ``True`` only where the value or its effective date could not be
-    read from an official source (fail-closed), and such rows are excluded from strict
-    financial validation per trade.
+    ``data/raw/p21_charges`` (fetched by ``scripts/_p21_charge_sources.py``).  P2.1.2
+    resolved the September-2024 uniform-rate reference: FA73061 cites
+    ``NSE/FA/64323`` (which returns HTTP 404); that is a circular-reference mismatch,
+    likely a typographical error.  The official primary document located is
+    ``NSE/FA/64232`` (dated September 27, 2024), matching the subject and effective
+    charges referenced by FA73061; verbatim: *"Equity Options: Rs. 35.03 each side
+    per lakh of premium value"*, *"applicable with effect from October 1, 2024"*.
+    The 2024-10-01 row is now sourced from that circular (``verification=verified``),
+    with the mismatch recorded in provenance.  The pre-Apr-2023 slab VALUES and the
+    2021-01-01 start date are also sourced from NSE/FA/46730, but the slab-tier applied
+    to a research book is an assumption, so the two slab-era rows honestly stay
+    ``estimated`` and preserve the full slab table in their provenance.
 
     Sourcing notes (see ``logs/p21_excerpts_*.txt`` for the verbatim bytes):
       * Exchange transaction charge + NSE IPFT are levied *each side* on the traded
-        premium.  The current flat regime (Rs 3,552.99 txn + Rs 0.01 IPFT per crore, wef
-        2026-03-01) is read straight from NSE circular FA73061.  The prior flat regime
-        (Rs 3,503 + Rs 50 per crore) is the "existing" column FA73061 quotes for
-        NSE/FA/64323 (2024-09-27); that circular's PDF returned 404 at Rs 0, so its
-        effective date is *inferred* and the row stays ``estimated``.  The pre-2024 slab
-        regimes (FA56129, Rs per lakh of premium) depend on a member's monthly volume,
-        which is unknowable for a research book, so the first marginal slab is used as a
-        documented conservative convention and those rows stay ``estimated``.
+        premium.  The current flat regime (Rs 3,552.99 txn + Rs 0.01 IPFT per crore,
+        wef 2026-03-01) is read straight from NSE circular FA73061.  The prior flat
+        regime (Rs 3,503 + Rs 50 per crore, wef 2024-10-01) is read from NSE circular
+        FA64232 (Sept-27-2024); FA73061 quotes it as ``64323``, a circular-reference
+        mismatch now documented.  The 2023-04-01 slab revision comes from NSE circular FA56129,
+        and the 2021-01-01 slab schedule comes from NSE circular FA46730.
       * STT on the option *seller* (premium) is verified across three eras: 0.0625%
         (Finance (No.2) Bill 2024 cl.155 "existing"), 0.10% wef 2024-10-01 (same clause +
         NSE STT page), 0.15% wef 2026-04-01 (NSE STT page, Finance Act 2026).
@@ -194,7 +199,9 @@ def default_options_charge_regimes() -> tuple[OptionsChargeRegime, ...]:
         ``IndiaOptionsCosts.gst_pct``.
     """
     FA73061 = "https://nsearchives.nseindia.com/content/circulars/FA73061.pdf"
+    FA64232 = "https://nsearchives.nseindia.com/content/circulars/FA64232.pdf"
     FA56129 = "https://nsearchives.nseindia.com/content/circulars/FA56129.pdf"
+    FA46730 = "https://nsearchives.nseindia.com/content/circulars/FA46730.pdf"
     FB2425 = "https://www.indiabudget.gov.in/budget2024-25/doc/Finance_Bill.pdf"
     NSE_STT = ("https://www.nseindia.com/static/products-services/"
                "equity-derivatives-securities-transaction-tax")
@@ -246,30 +253,41 @@ def default_options_charge_regimes() -> tuple[OptionsChargeRegime, ...]:
         # ---- NSE exchange transaction charge, each side, on traded premium ----
         OptionsChargeRegime(
             "exchange_txn", "premium_pct", 0.00053, "2021-01-01", "2023-03-31",
-            basis="premium_turnover", source_url=FA56129,
-            circular_ref="NSE/FA/56129 (2023-03-24) 'Existing' column; prior NSE/FA/46730",
+            basis="premium_turnover", source_url=FA46730,
+            circular_ref="NSE/FA/46730, wef 2021-01-01 ('Revised' slab column)",
             verification="estimated", estimated=True,
-            provenance="FA56129 'Existing' first marginal slab Rs 53.00 per lakh of "
-                       "premium (Rs 3Cr-100Cr) = 0.053%. Slab depends on member monthly "
-                       "volume (unknowable for a research book); first slab used as a "
-                       "conservative convention."),
+            provenance="FA46730 slab schedule (wef Jan 1, 2021) - Equity Options, Rs per "
+                       "lakh of premium: up to Rs 3 Cr Rs 2,500 flat/month; Rs 3-100 Cr "
+                       "Rs 53.00; Rs 100-750 Cr Rs 50.50; Rs 750-1500 Cr Rs 45.50; Rs "
+                       "1500-2000 Cr Rs 40.50; >Rs 2000 Cr Rs 33.00. Value + date sourced, "
+                       "but the marginal slab for a research book is an assumption (no "
+                       "member turnover), so the model uses the first-marginal slab "
+                       "(Rs 53.00/lakh = 0.053%) as a conservative convention; estimated."),
         OptionsChargeRegime(
             "exchange_txn", "premium_pct", 0.0005, "2023-04-01", "2024-09-30",
             basis="premium_turnover", source_url=FA56129,
-            circular_ref="NSE/FA/56129 (2023-03-24) 'Revised', wef 2023-04-01",
+            circular_ref="NSE/FA/56129 (2023-03-24) 'Revised' slab column, wef 2023-04-01",
             verification="estimated", estimated=True,
-            provenance="FA56129 'Revised' first marginal slab Rs 50.00 per lakh of premium "
-                       "wef 2023-04-01 = 0.05%. Slab convention as above; end date "
-                       "inferred (NSE/FA/64323 effective date not sourced - PDF 404)."),
+            provenance="FA56129 slab schedule (wef Apr 1, 2023) - Equity Options, Rs per "
+                       "lakh of premium: up to Rs 3 Cr Rs 2,500 flat/month; Rs 3-100 Cr "
+                       "Rs 50.00; Rs 100-750 Cr Rs 47.50; Rs 750-1500 Cr Rs 42.50; Rs "
+                       "1500-2000 Cr Rs 37.50; >Rs 2000 Cr Rs 30.00. Value + date sourced, "
+                       "but the marginal slab for a research book is an assumption; model "
+                       "uses first-marginal slab (Rs 50.00/lakh = 0.05%) as a conservative "
+                       "convention; estimated."),
         OptionsChargeRegime(
             "exchange_txn", "premium_pct", 0.0003503, "2024-10-01", "2026-02-28",
-            basis="premium_turnover", source_url=FA73061,
-            circular_ref="NSE/FA/64323 (2024-09-27) [cited by FA73061; PDF 404 at Rs 0]",
-            verification="estimated", estimated=True,
-            provenance="FA73061 'Existing' column: Rs 3,503 per crore each side (uniform "
-                       "per-crore rate set by NSE/FA/64323 per SEBI circular 2024/92). "
-                       "VALUE verified via FA73061; effective_from INFERRED (64323 PDF "
-                       "404), so the row stays estimated (fail-closed on the date)."),
+            basis="premium_turnover", source_url=FA64232,
+            circular_ref="NSE/FA/64232 (2024-09-27), wef 2024-10-01",
+            verification="verified", estimated=False,
+            provenance="FA64232 verbatim: 'Equity Options: Rs. 35.03 each side per lakh "
+                       "of premium value' and 'The above revision in transaction charges "
+                       "will be applicable with effect from October 1, 2024' = Rs "
+                       "3,503/cr uniform (no slab) = 0.03503%. P2.1.2 note: FA73061 "
+                       "cites this as 'NSE/FA/64323', a circular-reference mismatch, "
+                       "likely a typographical error; the official primary document "
+                       "located is 'NSE/FA/64232' (dated September 27, 2024), matching "
+                       "the subject and effective charges referenced by FA73061."),
         OptionsChargeRegime(
             "exchange_txn", "premium_pct", 0.000355299, "2026-03-01", None,
             basis="premium_turnover", source_url=FA73061,

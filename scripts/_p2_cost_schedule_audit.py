@@ -1,4 +1,4 @@
-"""P2 stage 5 / P2.1 - audit the derivative charge schedule against its official sources.
+"""P2 stage 5 / P2.1 / P2.1.2 - audit the derivative charge schedule against its official sources.
 
 The directive requires options statutory charges to be *sourced* from official documents,
 and every rate that cannot be independently verified from those bytes to be marked
@@ -6,7 +6,9 @@ and every rate that cannot be independently verified from those bytes to be mark
 fabricated ``Rs 20 per lot`` exchange fee with premium-turnover rates read from NSE
 circulars FA73061 / FA56129, the Finance (No.2) Bill 2024 and the NSE STT/levies/stamp
 pages (all fetched at Rs 0 by ``scripts/_p21_charge_sources.py`` into
-``data/raw/p21_charges``).  This script:
+``data/raw/p21_charges``).  P2.1.2 added the primary circulars FA64232 (the real
+Sept-27-2024 revision FA73061 mis-cites as "64323") and FA46730 (the 2021 slab schedule).
+This script:
 
 1. scans the cached NSE F&O circulars and ``contract_specs.html`` (they carry expiry
    regimes, not charges) so the ``estimated`` flags remain an evidenced conclusion;
@@ -135,10 +137,14 @@ def _render_leg(say, res) -> None:
 def worked_round_trip(say) -> None:
     """Cost long-CE round trips at lot sizes resolved from the stage-2 reference DB.
 
-    Two examples are recalculated under the corrected premium-turnover schedule:
-      * the original 2025 example (entry 2025-01-02, exit 2025-01-30) - its exchange
-        transaction charge falls in the pre-2026 flat era whose effective date is inferred
-        (NSE/FA/64323 PDF 404), so the leg stays ESTIMATED and is NOT strict-verifiable;
+    Three examples are recalculated under the corrected premium-turnover schedule:
+      * the original 2025 example (entry 2025-01-02, exit 2025-01-30) - under P2.1 its
+        exchange charge fell in the pre-2026 flat era whose effective date was inferred
+        (NSE/FA/64323 PDF 404); P2.1.2 sourced the primary circular NSE/FA/64232, so the
+        2024-10-01 era is *verified* and this trade is now strict-verifiable;
+      * a slab-era example (2022) - the FA46730 slab VALUES are sourced but the marginal
+        slab for a research book is an assumption, so the leg stays ESTIMATED and is not
+        strict-verifiable;
       * a 2026 example (both legs on/after 2026-03-01) - every statutory rate there is
         read from FA73061, so with brokerage excluded the round trip IS strict-verifiable.
     """
@@ -162,11 +168,36 @@ def worked_round_trip(say) -> None:
         _render_leg(say, trip[leg])
     say(f"\nround-trip total costs: Rs {trip['total_costs']:,.4f}")
     say(f"brokerage_excluded: {trip['brokerage_excluded']}")
-    say(f"strict_verifiable: {trip['strict_verifiable']}")
-    if not trip["strict_verifiable"]:
-        say("=> the 2025 exchange-transaction row is ESTIMATED (pre-2026 flat era; "
-            "NSE/FA/64323 effective date inferred, PDF 404 at Rs 0), so this trade is "
-            "EXCLUDED from strict financial validation (fail-closed). Modelling use only.")
+    say(f"statutory_verified: {trip['statutory_verified']}   "
+        f"all_in_verified: {trip['all_in_verified']}   "
+        f"strict_verifiable: {trip['strict_verifiable']}")
+    say(f"cost basis: {trip['cost_basis']}")
+    if trip["strict_verifiable"]:
+        say("=> P2.1.2: the 2024-10-01 exchange-transaction era is sourced from the actual "
+            "circular NSE/FA/64232 (FA73061's '64323' is a circular-reference mismatch, "
+            "likely a typographical error), so this "
+            "2025 trade IS strict-verifiable with brokerage excluded. It is NOT all-in "
+            "verified: the broker fee is a real cost that has been omitted.")
+    else:
+        say("=> still fail-closed: some statutory rate used by this trade is estimated.")
+
+    # ---- Example 1b: a slab-era trade (fails closed on the slab convention) ----
+    say("\n" + "-" * 104)
+    say("EXAMPLE 1b - 2022 slab-era round trip (premium 150 -> 180), brokerage excluded")
+    say("-" * 104)
+    trip22 = neutral.round_trip(entry_premium=150.0, exit_premium=180.0,
+                                lot_size=25, lots=lots,
+                                entry_date="2022-01-03", exit_date="2022-01-27")
+    for leg in ("entry", "exit"):
+        _render_leg(say, trip22[leg])
+    say(f"\nround-trip total costs: Rs {trip22['total_costs']:,.4f}")
+    say(f"statutory_verified: {trip22['statutory_verified']}   "
+        f"strict_verifiable: {trip22['strict_verifiable']}")
+    if not trip22["strict_verifiable"]:
+        say("=> the FA46730/FA56129 slab VALUES are sourced, but the marginal slab for a "
+            "research book is an assumption (no member turnover), so the two slab-era "
+            "exchange_txn rows stay ESTIMATED and these trades are EXCLUDED from strict "
+            "financial validation (fail-closed). Modelling use only.")
 
     # ---- Example 2: a 2026 round trip on fully-sourced current-era rates ----
     say("\n" + "-" * 104)
@@ -179,7 +210,9 @@ def worked_round_trip(say) -> None:
         _render_leg(say, trip26[leg])
     say(f"\nround-trip total costs: Rs {trip26['total_costs']:,.4f}")
     say(f"brokerage_excluded: {trip26['brokerage_excluded']}")
-    say(f"strict_verifiable: {trip26['strict_verifiable']}")
+    say(f"statutory_verified: {trip26['statutory_verified']}   "
+        f"all_in_verified: {trip26['all_in_verified']}   "
+        f"strict_verifiable: {trip26['strict_verifiable']}")
     if trip26["strict_verifiable"]:
         say("=> every statutory rate on these dates is sourced (STT 0.10%, exchange txn "
             "Rs 3,552.99/cr, IPFT Rs 0.01/cr, SEBI Rs 10/cr, stamp 0.003% buyer) and "
@@ -228,9 +261,11 @@ def main() -> int:
     live_est = int(live["estimated"].astype(bool).sum())
     say(f"currently in-force core rows (effective_to blank): {len(live)}  estimated: {live_est}"
         f"  -> {'all sourced' if live_est == 0 else 'some estimated'}")
-    say("estimated rows that remain: pre-2026 exchange_txn (slab convention / inferred "
-        "NSE-FA-64323 date) and the gst config tax knob; stt_exercised rows are "
-        "reference-only (engine has no exercise path).")
+    say("estimated rows that remain: the two pre-Apr-2026 slab-era exchange_txn rows "
+        "(values sourced from FA46730/FA56129 but the marginal slab is a convention) and "
+        "the gst config tax knob; stt_exercised rows are reference-only (engine has no "
+        "exercise path). P2.1.2 verified the 2024-10-01 exchange_txn era from the primary "
+        "circular FA64232.")
 
     say("\n" + "=" * 104)
     say("worked option round trips (recalculated on the premium-turnover schedule)")

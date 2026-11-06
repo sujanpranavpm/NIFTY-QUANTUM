@@ -95,13 +95,16 @@ def transaction_costs_verified() -> bool:
 
     P2.1 replaced the fabricated Rs 20/lot exchange fee with premium-turnover rates read
     from NSE circulars FA73061 / FA56129, the Finance (No.2) Bill 2024 and the NSE
-    STT/levies/stamp pages, so 11 of 15 schedule rows are now verified and every
-    *currently in-force* core row is sourced.  The gate stays fail-closed (False) because
-    three historical ``exchange_txn`` rows (pre-2026-03-01) remain estimated: the FA56129
-    slab rate is a documented first-marginal-slab convention (a member's slab is unknowable
-    for a research book) and the flat Rs 3,503/cr era's effective date is inferred
-    (NSE/FA/64323 PDF returned 404 at Rs 0).  Trades on those dates are excluded from
-    strict financial validation per-trade by ``OptionsCostResult.strict_verifiable``.
+    STT/levies/stamp pages.  P2.1.2 sourced the primary circular NSE/FA/64232 (FA73061
+    mis-cites it as "64323", a circular-reference mismatch, likely a typographical error,
+    for this dated-September-27-2024 document), verifying the 2024-10-01 exchange_txn
+    era, and FA46730 for the 2021 slab values - so 12 of 15 schedule rows are now
+    verified and every *currently in-force* core row is sourced.  The gate stays
+    fail-closed (False) because two historical slab-era ``exchange_txn`` rows
+    (pre-2023-04-01 and 2023-04-01..2024-09-30) remain estimated: the marginal slab for a
+    research book is a documented convention, not an observable.  Trades on those dates
+    are excluded from strict financial validation per-trade by
+    ``OptionsCostResult.strict_verifiable``.
     """
     schedule = REFERENCE / "options_charge_schedule.csv"
     if not schedule.exists():
@@ -189,12 +192,13 @@ def main() -> int:
         w(f"{r['resolution']:<10} {str(r['qualified']):<10} {gates:<8} {r['failed_gates'] or '-'}")
 
     w("\nHONEST LIMITATIONS (why a gate may stay open):")
-    w("  - transaction_costs_verified is open: P2.1 sourced 11 of 15 schedule rows from official")
-    w("    NSE circulars (FA73061/FA56129), the Finance (No.2) Bill 2024 and the NSE STT/levies/")
-    w("    stamp pages, and every currently in-force core rate is verified. Three historical")
-    w("    exchange_txn rows (pre-2026-03-01) stay estimated (FA56129 slab convention; NSE/FA/")
-    w("    64323 effective date inferred, PDF 404 at Rs 0), so the gate stays fail-closed and")
-    w("    trades on those dates are excluded per-trade by OptionsCostResult.strict_verifiable.")
+    w("  - transaction_costs_verified is open: P2.1.2 sources 12 of 15 schedule rows from")
+    w("    official NSE circulars (FA73061/FA64232/FA56129/FA46730), the Finance (No.2)")
+    w("    Bill 2024 and the NSE STT/levies/stamp pages, and every currently in-force core")
+    w("    rate is verified. Two slab-era exchange_txn rows (pre-2024-10-01) stay estimated")
+    w("    (the marginal slab for a research book is a convention, not an observable), so")
+    w("    the gate stays fail-closed and trades on those dates are excluded per-trade by")
+    w("    OptionsCostResult.strict_verifiable.")
     w("  - intraday coverage horizon is the cached provider archive (newest expiry truncated);")
     w("    no free, no-account source extends it, so it is reported, never fabricated.")
     w("  - OI-observation availability on exchange-positive contract-days is measured (33.6%")

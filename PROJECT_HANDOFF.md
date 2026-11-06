@@ -10,8 +10,11 @@ the operational knowledge a new session needs to not break things. For P2 specif
 
 **Completed:** T1–T8 (platform + verdict-gated signal engine), P0 (git baseline + docs),
 P1 (zero-cost NIFTY options data verification → `DATA_FEASIBILITY_REPORT.md`), the
-data-accuracy corrections milestone (volume/OI/terminal-candle/completeness + T9), and
-**P2 (master accuracy remediation + readiness audit, 8 atomic stages)** — ingestion,
+data-accuracy corrections milestone (volume/OI/terminal-candle/completeness + T9),
+**P2 (master accuracy remediation + readiness audit, 8 atomic stages)**, the **P2.1**
+financial-accuracy audit (premium-turnover charge schedule) and the **P2.1.2** follow-up
+(the Sept-2024 uniform-rate circular NSE/FA/64232 sourced; statutory vs all-in
+verification levels separated) — ingestion,
 1m/5m/15m candle datasets, options cost/execution/accounting engines and the fail-closed
 readiness gate all exist and are tested.
 **Awaiting:** user review of `P2_READINESS_AUDIT.md` and the final reconciliation before any
@@ -212,9 +215,11 @@ decision rather than an exploration:
 1. P2 ingestion ran through the existing layer as planned (8 stages, complete). The
    **options** cost model that was missing then now exists as
    `nifty_quant/engine/options_costs.py` (equity `costs.py` untouched). P2.1 then sourced its
-   schedule from official NSE circulars (see the P2.1 section below): 11 of 15 rows are
-   `verified` and every current-era rate is sourced, so the only remaining open work on the
-   gate is the three pre-2026 `exchange_txn` rows (slab convention + NSE/FA/64323 404).
+   schedule from official NSE circulars and P2.1.2 added the primary circular NSE/FA/64232
+   (see the P2.1.2 section at the end): **12 of 15 rows are `verified`** and every rate in
+   force from 2024-10-01 is sourced, so the only remaining open work on the gate is the two
+   pre-Oct-2024 slab-era `exchange_txn` rows (the marginal slab a member pays is unknowable
+   for a research book, so they stay `estimated` by design, not for want of a source).
 2. T10 full-universe daily run to get honest equity baselines.
 3. T11 screening and deep validation. Do not shortlist before T10.
 
@@ -260,14 +265,19 @@ Any OI-based intraday signal stays restricted to independently verified observat
   `data/options/`, `logs/` remain git-ignored.
 - **Readiness gate is the resume point.** `nifty_quant/validation/readiness.py` fails closed: a
   resolution is qualified only when all 12 gates are literally `True`. Today 11/12 pass for 1m/5m/15m
-  and the open gate is `transaction_costs_verified`. P2.1 sourced the current-era charge rates
-  (11/15 rows verified); the gate stays open only because the three pre-2026 `exchange_txn` rows are
-  still `estimated` (slab convention + inferred NSE/FA/64323 date). Closing it fully needs that
-  circular, or an accepted per-trade exclusion for pre-2026 dates (already enforced by the engine).
-- **Determinism contract.** The suite must pass from repo root, from `tests/`, bare `pytest` and
-  `python -m pytest` alike (508 tests after P2.1; 495 at the P2 reconciliation) —
+  and the open gate is `transaction_costs_verified`. P2.1 sourced the current-era charge rates and
+  P2.1.2 sourced the primary circular NSE/FA/64232 (**12/15 rows verified**, every rate in force
+  from 2024-10-01); the gate stays open because the two pre-Oct-2024 slab-era `exchange_txn` rows
+  are `estimated` — the marginal slab a member pays is unknowable for a research book, so this is
+  a permanent, by-design exclusion, **not** something a further circular can close. Do not chase
+  `NSE/FA/64323`: that is a circular-reference mismatch, likely a typographical error, for the
+  primary circular `NSE/FA/64232` (dated September 27, 2024), now sourced.
+- **Determinism contract.** The suite must pass from repo root (`pytest` / `python -m pytest tests`)
+  with **zero skips** (516 tests after P2.1.2; 508 after P2.1; 495 at the P2 reconciliation) —
   `tests/conftest.py` pins the repo root onto `sys.path` and
-  now carries the `bracket_*` deterministic fixtures. Do not reintroduce a data-dependent skip.
+  now carries the `bracket_*` deterministic fixtures. From inside `tests/` three disk-anchored
+  tests still skip (they read `data/derived`/`logs/` by CWD) — pre-existing, not a regression.
+  Do not reintroduce a data-dependent skip in the repo-root run.
 - **Pinned stack.** `requirements.lock` is the reproducible contract (python 3.12.10, pandas 3.0.1,
   numpy 2.4.3, pyarrow 25.0.1, scipy 1.17.1, pytest 9.1.1); verify with `python
   scripts/_p2_env_check.py` (expect REPRODUCIBLE). Audit-only deps live in `requirements-audit.txt`.
@@ -276,6 +286,10 @@ Any OI-based intraday signal stays restricted to independently verified observat
   (`costs.py`, `fill_engine.py`) are untouched by design — options code is additive.
 
 ## Final reconciliation (2026-11-05) — authoritative state
+
+> Superseded on 2026-11-06 by the **P2.1.2** section at the end of this file (test count
+> 508 → 516, and the NSE/FA/64323 "residual gap" below is resolved). The bullets are kept as
+> the dated 2026-11-05 snapshot.
 
 - **Test count:** 508 passed, 0 failed, 0 skipped (P2.1 re-run). 495 was the P2 reconciliation
   count; P2.1 added 13 net options-cost tests. No test removed.
@@ -322,3 +336,45 @@ An independent review flagged the options transaction-cost schedule. P2.1 correc
   a pre-2026 trade stays `False`. The recalculated worked round-trip (150→180, lot 75, 2 lots) is
   **Rs 48.4865** (was Rs 122.13 under the inflated per-lot fee). `transaction_costs_verified` stays
   fail-closed for the full horizon. **508 tests pass**; no strategy optimisation or live trading begun.
+
+## P2.1.2 follow-up (2026-11-06) — FA64232 sourced + verification levels split
+
+Supersedes two P2.1 claims above (the "residual gap is NSE/FA/64323" and "on/after 2026-03-01 is
+strict-verifiable"). One atomic commit. At Rs 0.
+
+1. **The Sept-2024 circular was found — the 404 is a circular-reference mismatch, likely a
+   typographical error, not a missing document.** FA73061 cites
+   `NSE/FA/64323` for the Oct-2024 uniform rate, but the official primary document located is
+   `NSE/FA/64232`, dated September 27, 2024, matching the subject and effective charges
+   referenced by FA73061. `scripts/_p21_charge_sources.py` now fetches it (plus `FA46730` for the 2021 slab
+   schedule) into `data/raw/p21_charges`; verbatim bytes in `logs/p21_excerpts_FA64232.txt`:
+   *"Equity Options: Rs. 35.03 each side per lakh of premium value … with effect from October 1,
+   2024"*. The **2024-10-01 `exchange_txn` row is now `verified`** (0.03503%), so the schedule is
+   **12 of 15 rows verified** and **every trade dated on/after 2024-10-01 is strict-verifiable**
+   with brokerage excluded (not just on/after 2026-03-01 as P2.1 said). Do not re-add `64323` to any
+   target list or re-open this as an unknown.
+2. **The gate still fails closed — now by design, permanently.** The two remaining `estimated`
+   `exchange_txn` rows are the pre-Oct-2024 *slab* eras. Their VALUES are sourced (FA46730/FA56129)
+   but the marginal slab a member actually pays depends on monthly turnover, which a research book
+   has none of, so the first-marginal-slab convention is used and the rows stay `estimated`. No
+   further circular can change that — it is an unobservable, not an unsourced fact. `transaction_costs_verified`
+   therefore stays open for the full horizon (11/12 gates), exactly as the fail-closed contract requires.
+3. **statutory_verified vs all_in_verified are now distinct fields** (`OptionsCostResult`), because
+   P2.1's single `strict_verifiable` conflated two things. `statutory_verified` = every statutory
+   rate sourced (brokerage irrelevant). `all_in_verified` = `statutory_verified` AND the broker fee
+   *attested* (`BrokerageConfig.verified=True`). **Excluding brokerage is NOT all-in verification** —
+   a `model='none'` trade is `statutory_verified=True, all_in_verified=False`; its `cost_basis` reads
+   *"statutory-only … do not label as net profit"*. `strict_verifiable` is kept (== statutory_verified
+   AND brokerage excluded-or-verified) as the backward-compatible "publishing-safe" verdict, so
+   `options_accounting`/`options_execution` still gate on it unchanged. Worked example: the 2025
+   round trip (150→180, lot 75, 2 lots) is **Rs 48.4865**, now `strict_verifiable=True`; a 2022
+   slab-era trade is Rs 16.1886 and fails closed.
+4. **Tests: 516 passed / 0 failed / 0 skipped** from repo root (`logs/_p212_full_suite.log`). +8 new
+   over P2.1's 508 (6 in `test_options_costs`, 1 each in `test_options_accounting`/`test_options_execution`):
+   the verification-level matrix (statutory vs all-in vs strict) and the FA64232-era/round-trip pins.
+   Three older tests that asserted "2025 is estimated" were re-targeted to a slab-era date so their
+   fail-closed intent is preserved. No test removed; equity `costs.py` still untouched. From `tests/`
+   the same 3 disk-anchored skips as before (CWD-relative `data/derived`/`logs/`) — not a regression.
+5. **Regenerate the evidence** by running `python scripts/_p2_cost_schedule_audit.py` (rewrites
+   `options_charge_schedule.csv`, `logs/p2_options_cost.txt`) then `python scripts/_p2_readiness_checks.py`
+   (`logs/p2_readiness.txt`). Both need `$env:PYTHONPATH` + `PYTHONIOENCODING=utf-8` (they print `Rs`).
