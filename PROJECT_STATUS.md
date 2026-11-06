@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-07 (P0 + P1 + P2 + P2.1 + P2.1.2 + P2.2.3 + P2.2.4 + P2.2.5 + P2.2.5.1 + P2.2.6 + P2.2.6.1 + P2.2.6.2 + **P2.2.7 data-requirements & readiness audit** complete; authoritative test count 556 = 539 + 17 P2.2.6.2 exit-convention acceptance tests; P2.2.7 is **documentation-only** — the sole code addition is the read-only helper `scripts/_p227_data_audit.py`; NOT committed)
+Last updated: 2026-11-07 (P0 + P1 + P2 + P2.1 + P2.1.2 + P2.2.3 + P2.2.4 + P2.2.5 + P2.2.5.1 + P2.2.6 + P2.2.6.1 + P2.2.6.2 + P2.2.7 data-requirements audit + **P2.2.7.1 data audit consistency corrections** complete; authoritative test count 556 = 539 + 17 P2.2.6.2 exit-convention acceptance tests; P2.2.7.1 is **documentation-only** — no code or data modified; NOT committed)
 Verified by direct inspection of the working tree and of the real data files — not from
 prior progress reports or provider marketing pages.
 
@@ -171,11 +171,21 @@ verdict per capability).
 Ground-truth facts re-measured this session (supersede older counts):
 
 - **Provider raw** `data/raw/p1_sample`: 1-minute NIFTY **index** 486,050 rows / 1,262 days
-  (2021-05-24→2026-07-02); **267** option-expiry files (by year 2021:31, 2022:52, 2023:52, 2024:52,
-  2025:52, 2026:28) — the archive is a **dense weekly/monthly set now**, not the old 23-file sample.
+  (2021-05-24→2026-07-02); **267 raw NIFTY option-expiry files discovered** (by year 2021:31, 2022:52,
+  2023:52, 2024:52, 2025:52, 2026:28) plus 1 raw BANKNIFTY sample file and 1 index file = **269 total raw
+  parquet files** in the folder.
+- **Usable expiry datasets vs exclusions:** **265 usable expiries** accepted by completeness and strict
+  session gates. **2 expiries excluded:** `2026-08-04` (malformed 2,646-row far-dated stub ending 2026-07-02,
+  no expiry-day rows, classified `TRUNCATED_TAIL`) and `2026-06-09` (4,636 rows, but all blocks fail strict
+  session classification due to sparse/partial prints).
 - **Official arbiter** `data/raw/p1_nse`: 318 NSE F&O bhavcopies, **2024-01-01→2026-11-03 only**
   (verification floor 2024-01-02; pre-2024 not served).
-- **Derived candles** `data/derived/candles`: **801 = 267 expiries × {1m,5m,15m}** (no 60m/30m).
+- **Derived candles** `data/derived/candles`: **801 total files created = 267 expiries × {1m,5m,15m}**
+  (no 60m/30m). **795 non-empty / usable candle files** (265 usable expiries × 3 resolutions); exactly
+  **6 candle files are empty (0 rows)** corresponding to the 2 excluded expiries.
+- **Usable contract-day coverage:** **305,027 contract-days** across **47,929 usable contracts** over
+  1,128 distinct option trading days and 1,116 index-option overlap days (1,072 eligible entry days with
+  MIN_DTE=2 at D+1; 121 executable unique entries).
 - **Registry** `nifty_coverage_registry.csv` 181,973 rows; arbiter-verified 179,646; by-year
   contract-day cells 2021:345 / 2022:492 / 2023:532 **all UNKNOWN (arbiter=0)**, 2024:95,433 /
   2025:68,751 / 2026:16,107 (arbiter-verified). PRESENT 77,627; ceiling ~37.81% (arbitrated only).
@@ -186,11 +196,16 @@ Ground-truth facts re-measured this session (supersede older counts):
 Verdict (honest): the **Tier-1 long-only CE option study runs but is quality-bounded** (short-DTE
 density ⇒ "insufficient evidence"); **2021-2023 option data is present-but-unverifiable**; **full-horizon
 strict financial validation is permanently fail-closed** (2 slab-era cost rows estimated). **Absolutely
-blocked at ₹0:** bid/ask/spread/depth execution realism, observed IV/Greeks/VIX, IV-aware strategies.
-**Closable later (no new data or a ₹0 fetch):** real liquidity gate + `SttlmPric` wiring (behaviour fixes,
-deferred by the no-execution-change rule), denser option history, and a future-authorised full-universe +
-point-in-time equity fetch (T10). Monte Carlo is **not implemented**; 10,000 iterations are repetitions of
-a resample of the finite observed set, not 10,000 market observations. Suite **556 passed**; **nothing
+blocked at ₹0:** bid/ask/spread/depth execution realism, observed contract IV/Greeks, full-horizon strict
+financial validation. **Missing India VIX vs option contract IV:** missing India VIX blocks index-volatility-conditioned
+regime analysis, but India VIX is an index benchmark (published historically by NSE free of charge) and is
+**NOT an input to Black-Scholes contract IV inversion**. Contract-level IV and Greeks could potentially be estimated
+from option premium, spot, strike, DTE, a risk-free rate assumption (C4), and a dividend assumption (C5), but
+would be **model-derived estimates**, not observed market data, and not equivalent to an observed volatility surface.
+**Observed vs simulated backtest returns:** market prices are [OBSERVED] inputs; historical backtest trade P&L (G1)
+and daily portfolio returns (G2) are [SIMULATED] / [DERIVED] model outputs; live-trading returns do not exist.
+Monte Carlo is **not implemented**; 10,000 iterations are repetitions of a resample of the finite backtest-generated
+simulated outcome set, not 10,000 independent historical market observations. Suite **556 passed**; **nothing
 committed — awaiting review before external-source discovery or any download.**
 
 ## Environment (verified)
@@ -364,6 +379,7 @@ Findings that bind all later work, in one line each:
 | P2.2.6.1 | Forensic reconciliation of the contradictory P2.2.6 session-summary claims (config inventory, independent metric recompute, PF/definition audit) | **Done** — artifacts consistent (0 mismatches, no negative PF, no +15/−15 run existed); classifications unchanged, zero advance; contradicted-claims register delivered |
 | P2.2.6.2 | Exit-convention decision & default hardening (user-authorised): +15/−8 default, orders_12 +16/−8 via central `EXIT_POLICY`, ±30% pinned historical-only | **Done** — library default changed with historical scripts pinned; +6 tests (539 green); no artifacts touched; verdict unchanged (zero advance) |
 | P2.2.7 | Complete data-requirements & readiness audit (documentation-only): master inventory A–G, per-dataset spec, fresh coverage audit of the real files, gap/blocker analysis, readiness matrix | **Done** — 4 deliverables + STATUS/HANDOFF; sole code change is read-only helper `_p227_data_audit.py`; no download/account/provider discovery; no dataset modified; MC not implemented; suite 556 green; nothing committed — awaiting review before external-source discovery |
+| P2.2.7.1 | Data audit consistency corrections (documentation-only): raw vs usable counts (267 raw NIFTY / 265 usable / 801 candles / 795 usable / 6 empty), backtest returns [SIMULATED]/[DERIVED] (not observed market returns), India VIX distinguished from contract IV (VIX is index benchmark, not input to IV inversion; contract IV would be model-derived estimate) | **Done** — 6 docs updated + P2.2.7.1 deliverable; no code, data, or tests modified; nothing committed — awaiting review before P2.2.8 external-source discovery |
 | T10 | Full-universe data fetch + 20-strategy research & validation | Outstanding |
 | T11 | Strategy applicability screening → shortlist ~5 → keep ≤3 | Outstanding |
 | — | FastAPI + DB layer + Streamlit dashboard (old plan t8 remainder) | Not started, not authorised |

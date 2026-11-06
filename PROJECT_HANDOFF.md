@@ -25,15 +25,18 @@ exit-convention decision & default hardening (approved +15%/−8%, orders_12 +16
 library default via a central per-strategy `EXIT_POLICY`; ±30% pinned historical-only) — ingestion,
 1m/5m/15m candle datasets, options cost/execution/accounting engines and the fail-closed
 readiness gate all exist and are tested, plus the **P2.2.7** complete data-requirements & readiness
-audit (documentation-only: a master inventory of every dataset the platform needs, a fresh
-file-level coverage audit, a gap/blocker report and a research-readiness matrix).
-**Awaiting:** user review of the **P2.2.7** documents
+audit and the **P2.2.7.1 data audit consistency corrections** (documentation-only: master inventory of
+every dataset the platform needs, fresh file-level coverage audit distinguishing raw vs usable counts,
+gap/blocker report, research-readiness matrix, and the consistency corrections deliverable
+`P2.2.7.1_DATA_AUDIT_CORRECTIONS.md`).
+**Awaiting:** user review of the **P2.2.7 / P2.2.7.1** documents
 (`P2.2.7_DATA_REQUIREMENTS_SPECIFICATION.md`, `P2.2.7_CURRENT_DATA_COVERAGE_AUDIT.md`,
-`P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md`, `P2.2.7_RESEARCH_READINESS_MATRIX.md`) — and of
+`P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md`, `P2.2.7_RESEARCH_READINESS_MATRIX.md`,
+`P2.2.7.1_DATA_AUDIT_CORRECTIONS.md`) — and of
 `P2.2.6.2_EXIT_CONVENTION_DECISION.md`,
 `P2.2.6.1_RESULTS_RECONCILIATION.md`, `P2.2.6_EXIT_RESEARCH_REPORT.md`
 and `P2.2.5.1_SCREENING_INTEGRITY_AUDIT.md` (the P2.2.6 §10 exit-convention decision was
-**executed in P2.2.6.2** under user authorisation) before any new milestone starts.
+**executed in P2.2.6.2** under user authorisation) before P2.2.8 or any new milestone starts.
 **Explicitly NOT authorised until after review:** external-source discovery, any data download,
 account creation, paid services.
 **Not started, and not authorised:** T10 (full-universe research run), T11 (strategy
@@ -209,42 +212,56 @@ User-authorised: (1) **+15%/−8% is the default** options research exit convent
    unknown ids, empty strategy set). **Full suite 539 passed** (`logs/_p2262_fullsuite.log`).
    Decision record: `P2.2.6.2_EXIT_CONVENTION_DECISION.md`.
 
-## P2.2.7 — complete data-requirements & readiness audit (documentation-only, NOT committed)
+## P2.2.7 + P2.2.7.1 — data-requirements audit & consistency corrections (documentation-only, NOT committed)
 
 Establishes **exactly what data the platform needs** before any new source is searched or
-downloaded. Pure documentation; the **only** code added is the **read-only** helper
+downloaded. Pure documentation; the **only** code added in P2.2.7 was the **read-only** helper
 `scripts/_p227_data_audit.py` → `logs/_p227_data_audit.log` (introspects schemas/counts/date spans;
 **never writes `data/`**). It was added (rather than an inline `python -c`) because PowerShell mangles
-long multi-line `-c` (operational fact #4) and so the Phase-4 counts are reproducible. Because a file
+long multi-line `-c` (operational fact #4) and so the counts are reproducible. Because a file
 under `scripts/` changed, the full repo-root suite was re-run: **556 passed** (unchanged from P2.2.6.2
-— no test or library code touched).
+— no test or library code touched). P2.2.7.1 made zero code changes.
 
-Four deliverables: (1) `P2.2.7_DATA_REQUIREMENTS_SPECIFICATION.md` — master inventory of categories
+Deliverables: (1) `P2.2.7_DATA_REQUIREMENTS_SPECIFICATION.md` — master inventory of categories
 A–G, each dataset with fields/purpose/consumers/resolution/history/accuracy/sourced-vs-calculated/
-one of **7 requirement classes**/dependencies/if-missing, plus governance rules H1–H5 and the explicit
-Monte Carlo clarification (10,000 iterations = repetitions of a resample of the finite observed set,
-**not** 10,000 market observations). (2) `P2.2.7_CURRENT_DATA_COVERAGE_AUDIT.md` — every file re-measured
-fresh (see the corrected counts below), six-way status per requirement. (3)
-`P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md` — per-capability absolute blockers vs quality improvements.
+one of **7 requirement classes**/dependencies/if-missing, plus governance rules H1–H5, the explicit
+Monte Carlo clarification (10,000 iterations = repetitions of a resample of the finite backtest-generated
+outcomes, **not** 10,000 independent market observations; G1/G2 returns are [SIMULATED]/[DERIVED], not observed returns),
+and the clear separation of India VIX from contract-level IV. (2) `P2.2.7_CURRENT_DATA_COVERAGE_AUDIT.md` — every file
+re-measured fresh, distinguishing raw files discovered from accepted usable datasets, six-way status per requirement.
+(3) `P2.2.7_DATA_GAP_AND_BLOCKER_REPORT.md` — per-capability absolute blockers vs quality improvements.
 (4) `P2.2.7_RESEARCH_READINESS_MATRIX.md` — GREEN/AMBER/RED-DATA/RED-CONSTRAINT/N-A per capability.
+(5) `P2.2.7.1_DATA_AUDIT_CORRECTIONS.md` — audit correction report detailing the three consistency fixes.
 
-**Counts corrected by this audit (older docs are stale — do NOT reuse them):**
+**Counts and distinctions settled by this audit (older docs are stale — do NOT reuse them):**
 
-- The provider archive is now a **dense 267-expiry set** (2021:31, 2022:52, 2023:52, 2024:52, 2025:52,
-  2026:28), **not** the "23-file sample" still written in `P2.2_DATA_FEASIBILITY_REPORT.md`.
-- `data/derived/candles` = **801 = 267 × {1m,5m,15m}** (no 60m/30m produced).
-- Registry `nifty_coverage_registry.csv` = **181,973 rows**; arbiter-verified only **2024+** (contract-day
+- **Raw files vs usable datasets:** **267 raw NIFTY option-expiry files discovered** (plus 1 BANKNIFTY sample
+  and 1 index file = 269 total raw parquet files in `data/raw/p1_sample`).
+- **Usable expiry datasets:** **265 usable expiries** accepted by completeness and strict session gates. Exactly
+  **2 expiries excluded:** `2026-08-04` (malformed 2,646-row far-dated stub ending 2026-07-02 with no expiry-day rows,
+  `TRUNCATED_TAIL`) and `2026-06-09` (4,636 raw rows, but all blocks fail strict session classification due to sparse prints).
+- **Derived candles** `data/derived/candles`: **801 total files created = 267 expiries × {1m,5m,15m}** (no 60m/30m).
+  **795 non-empty / usable candle files** (265 usable expiries × 3 resolutions); exactly **6 candle files are empty (0 rows)**
+  (1m, 5m, 15m for the 2 excluded expiries).
+- **Usable contract-day coverage:** **305,027 contract-days** across **47,929 usable contracts** over 1,128 distinct option
+  trading days and 1,116 index-option overlap days (1,072 eligible entry days with MIN_DTE=2 at D+1; 121 executable unique entries).
+- **Registry** `nifty_coverage_registry.csv` = **181,973 rows**; arbiter-verified only **2024+** (contract-day
   cells 2021/22/23 = 345/492/532 are **all `UNKNOWN`, arbiter=0**); `PRESENT` 77,627; ~37.81% coverage ceiling.
-- `IDX_NSEI` 4,133 daily verified; full NIFTY50 daily **not fetched**; `nifty50_snapshot.csv` has empty
+- **Equity cache** `data/cache/1d`: `IDX_NSEI` 4,133 daily verified; full NIFTY50 daily **not fetched**; `nifty50_snapshot.csv` has empty
   membership dates → `survivorship_bias_exposed=True`.
 
-**Key blockers established (for the next decision, not acted on here):** bid/ask/spread/depth, observed
-IV/Greeks/VIX and full-horizon strict financial validation are **hard/impossible at ₹0**; the real
-liquidity gate + `SttlmPric` settlement wiring are **behaviour** fixes (present data, deferred by the
-no-execution-change rule); denser option history and a future-authorised full-universe + PIT fetch (T10)
-are the ₹0-closable levers. Negative grep confirmed no module reads VIX/participant/FII/bid/greeks/macro —
-so those absences are facts, not oversights. **Nothing committed; await review before external-source
-discovery or any download.**
+**Key distinctions and blockers established (for the next decision, not acted on here):**
+1. **Observed market data vs simulated backtest returns:** underlying market prices/quotes are [OBSERVED]; backtest trade
+   P&L (G1) and portfolio daily returns (G2) are [SIMULATED] / [DERIVED] model outputs; live-trading returns do not exist.
+   Monte Carlo resamples backtest-generated simulated outcomes, not raw observed market returns.
+2. **India VIX vs option contract IV:** missing India VIX (C1) blocks index-volatility-conditioned regime analysis, but
+   India VIX is an index benchmark (published by NSE free of charge) and is **NOT an input to Black-Scholes contract IV inversion**.
+   Contract IV (C2) and Greeks (C3) are not observed in the dataset; they could potentially be estimated using spot, strike, DTE,
+   a risk-free rate assumption (C4), and a dividend assumption (C5), but would be **model-derived estimates**, not observed market data,
+   and are not equivalent to an observed volatility surface.
+3. **Execution & validation blockers at ₹0:** bid/ask/spread/depth and full-horizon strict financial validation are
+   **hard/impossible at ₹0**; liquidity gate + `SttlmPric` wiring are behaviour fixes; denser option history and full-universe
+   equity fetch (T10) are ₹0-closable levers. **Nothing committed; await review before P2.2.8 external-source discovery or any download.**
 
 ## Non-obvious operational facts
 
