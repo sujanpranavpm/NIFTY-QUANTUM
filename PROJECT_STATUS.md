@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md
 
-Last updated: 2026-11-07 (P0 + P1 + P2 + P2.1 + P2.1.2 + P2.2.3 + P2.2.4 + P2.2.5 + P2.2.5.1 + P2.2.6 + P2.2.6.1 + P2.2.6.2 + P2.2.7 data-requirements audit + **P2.2.7.1 data audit consistency corrections** complete; authoritative test count 556 = 539 + 17 P2.2.6.2 exit-convention acceptance tests; P2.2.7.1 is **documentation-only** — no code or data modified; NOT committed)
+Last updated: 2026-11-07 (P0 + P1 + P2 + P2.1 + P2.1.2 + P2.2.3 + P2.2.4 + P2.2.5 + P2.2.5.1 + P2.2.6 + P2.2.6.1 + P2.2.6.2 + P2.2.7 data-requirements audit + P2.2.7.1 consistency corrections + P2.2.8 free historical data source discovery + P2.2.9 source permission & validation audit + P2.2.9.1 access policy correction + **P2.2.9.2 technical validation specification corrections** complete; authoritative test count 556 = 539 + 17 P2.2.6.2 exit-convention acceptance tests; P2.2.9.2 is **documentation-only** — no code or data modified; NOT committed)
 Verified by direct inspection of the working tree and of the real data files — not from
 prior progress reports or provider marketing pages.
 
@@ -208,6 +208,64 @@ Monte Carlo is **not implemented**; 10,000 iterations are repetitions of a resam
 simulated outcome set, not 10,000 independent historical market observations. Suite **556 passed**; **nothing
 committed — awaiting review before external-source discovery or any download.**
 
+## P2.2.8 — free historical data source discovery (complete, documentation-only, NOT committed)
+
+Systematic, read-only evaluation of thirteen quantitative data domains (A–M) against strict **₹0 budget,
+no accounts/logins, no broker APIs, and non-commercial research licensing**. No data was downloaded,
+no accounts created, and no code modified.
+
+Deliverables:
+- `P2.2.8_FREE_DATA_SOURCE_INVENTORY.md` — source-by-source audit with exact URLs, coverage dates, schemas, access methods, licensing, and limitations.
+- `P2.2.8_DATA_SOURCE_FEASIBILITY_MATRIX.md` — domain-by-domain (A–M) feasibility status, candidate sources, and impact on options and equity tracks.
+- `P2.2.8_SOURCE_DISCOVERY_DECISION.md` — executive decision, ranked implementation sequencing, and permanent hard blockers.
+
+Key findings:
+1. **Pre-2024 Legacy F&O Bhavcopy Discovered (Domain K):** While modern UDiFF bhavcopies only serve 2024+, the legacy path (`https://nsearchives.nseindia.com/content/historical/DERIVATIVES/YYYY/MON/foDDMONYYYYbhav.csv.zip`) publicly serves daily bhavcopies for 2021, 2022, 2023, and through July 5, 2024. This unblocks independent official arbitration of the entire 2021–2023 options cache at ₹0 without an account.
+2. **Option Pricing Parameters Confirmed (Domains C & D):** RBI DBIE 91-Day T-bill primary auction yields (`data.rbi.org.in`, weekly, 1990s→present) and Nifty Indices NIFTY 50 dividend yields (`niftyindices.com`, daily, 1999→present) are freely available via public web downloads, enabling in-repo Black-Scholes contract IV and Greek estimation.
+3. **Volatility & Positioning Regimes Confirmed (Domains A & E):** India VIX daily OHLC (`nseindia.com`, 2009→present) and participant-wise derivatives OI/volumes (`fao_participant_oi/vol`, 2014→present) are freely accessible from official exchange archives.
+4. **Permanent Hard Blockers at ₹0 Confirmed (Domains B & L):** Observed contract-level IV/Greeks, historical bid/ask quotes, spreads, and Level-2/Level-3 order-book depth exist in no free lawful source; they are commercial paid feeds. Under ₹0, contract IV must remain a model-derived estimate, and execution realism is capped at bar-OHLC + slippage. Intraday expired-option candles remain bounded by the existing Hugging Face archive (short-DTE window).
+Suite **556 passed**; **nothing committed — awaiting review.**
+
+## P2.2.9 — data source permission, validation & acquisition readiness audit (complete, documentation-only, NOT committed)
+
+Systematic licensing, policy, and technical validation audit of all 13 discovered data domains (A–M) under
+strict **₹0 budget, no accounts/logins, no broker APIs, and personal research constraints**. Zero bytes of
+market data downloaded, zero accounts created, and zero code modified.
+
+Deliverables:
+- `P2.2.9_SOURCE_PERMISSION_AUDIT.md` — source-by-source terms of use, licensing, schema, and legal risk classification for Domains A–M.
+- `P2.2.9_TECHNICAL_VALIDATION_PLAN.md` — concrete, fail-closed validation specifications (dual-schema Legacy vs UDiFF, calendar alignment, OHLC containment, tick size ₹0.05, lot size scaling across history, cross-source bhavcopy arbitration, and JSON provenance tracking).
+- `P2.2.9_ACQUISITION_READINESS_DECISION.md` — executive readiness decision, Part C Risk Register table, Part E research consequences (unlocked capabilities vs permanent hard blockers), and Part F 4-tier acquisition roadmap.
+
+Key findings & classifications:
+1. **Legal Readiness: PARTIALLY READY (CONDITIONAL):**
+   - **4 GO-CANDIDATE domains:** Sovereign/open-licensed data with clear research terms: RBI 91-Day T-Bills (Domain C), Macro series (Domain M), Nifty Indices Reconstitution press releases (Domain I), and Hugging Face 1m options Parquet under `CC-BY-NC-4.0` (Domain L).
+   - **2 DERIVED-ONLY domains:** In-repo mathematical/aggregation calculations: Black-Scholes Greeks/IV (Domain B, Rule H5 compliant) and Cash Bhavcopy Market Breadth (Domain G).
+   - **7 CONDITIONAL domains:** Official exchange archives (Domains A, D, E, F, H, J, K): hosted on public servers and accessible at ₹0 without credentials, but site terms prohibit automated scraping/harvesting and retrieval system storage without written consent. Manual browser-driven exports for personal research are permitted; automated scrapers are prohibited.
+2. **Permanent Hard Blockers at ₹0 Confirmed:** Level-2/Level-3 order-book depth, bid/ask quotes, spreads, and sub-minute execution queues exist in no free lawful source. Under ₹0, execution modeling remains bounded by bar OHLC + conservative slippage penalties.
+3. **Fail-Closed Validation Engine Defined:** Complete written specification for dual-format bhavcopies (July 8, 2024 UDiFF break), lot-size normalization (75 -> 50 -> 25), and SHA-256 provenance logging prior to any data ingestion.
+Suite **556 passed**; **nothing committed — awaiting review.**
+
+## P2.2.9.1 — access policy correction & two-axis reconciliation (complete, documentation-only, NOT committed)
+
+Systematic reconciliation of candidate source evaluations under the owner's clarified access rules:
+- **Cost:** ₹0 absolute (reject paid subscriptions, one-time fees, paid APIs, deposits, paid trials).
+- **Login:** No new provider-specific account; existing Google account sign-in (e.g. Google Drive, Google OAuth) is **acceptable**. Sources requiring separate provider registrations, broker/demat accounts, or KYC are rejected.
+- **Two-Axis Framework:** Technical access eligibility (Axis 1: `PASS — NO LOGIN`, `PASS — GOOGLE LOGIN`, `FAIL — PAYMENT`, `FAIL — NON-GOOGLE`) is strictly decoupled from data-use permission (Axis 2: `PERMITTED`, `CONDITIONAL`, `PROHIBITED`, `UNCLEAR`, `NOT APPLICABLE`). Google sign-in grants technical access, but does **not** confer a copyright license.
+- **Derived Domains (B & G):** BSM Greeks/IV and Market Breadth have zero external access gates, but strictly inherit all licensing, retention, and attribution obligations from their upstream inputs (C1, D1, H1, K1, L1).
+- **Safe Acquisition Gate Defined:** 7-point strict verification gate required before any future download milestone.
+Suite **556 passed**; **nothing committed — awaiting review.**
+
+## P2.2.9.2 — technical validation specification corrections (complete, documentation-only, NOT committed)
+
+Systematic technical audit and correction of validation rules in `P2.2.9_TECHNICAL_VALIDATION_PLAN.md` against official exchange evidence:
+1. **Instrument-Specific Tick Size:** Replaced universal ₹0.05 rule with effective-dated instrument reference (`data/reference/nifty_tick_sizes.csv`). NIFTY options traded bars use ₹0.05; settlement prices follow circular `NSE/FAOP/67135` ladder (₹0.10 for >15,000 from 2026-08-03); stock F&O inherit CM equity ticks (`NSE/FAOP/67134`). Replaced floating-point modulo with integer-paise arithmetic.
+2. **NIFTY Lot-Size History & Cohort Overlaps:** Replaced simple calendar-date table with full 5-regime modal schedule (75, 50, 25, 75, 65) and contract-level resolution key `(Symbol, ExpiryDate, StrikePrice, OptionType)`. Dual lots co-exist on transition dates (old expiries keep old lot, new expiries take new lot); unmapped cohorts reject from strict validation.
+3. **Participant-Wise OI Reconciliation:** Corrected report semantics: individual participant Long != Short is normal. Enforced strict row-level arithmetic sum checks. Reclassified market-wide aggregate equality as a diagnostic metric rather than a fatal pipeline abort.
+4. **Missing Intraday Bars & Stale OI:** Enforced strict zero-imputation policy (never synthesize OHLC prices). Separated `NO_TRADES`, `MISSING_DAYS`, `TRUNCATED_SESSION`, `MARKET_WIDE_HALT`, and `PRESENT_WITHOUT_OI`. Zero OI is excluded from OI features, never forward-filled.
+5. **EOD Close vs 30-Minute VWAP:** Classified as diagnostic only; not like-for-like (1-minute traded close vs 30-minute VWAP). Replaced arbitrary 2.5% failure threshold with EOD High/Low range containment check.
+Suite **556 passed**; **nothing committed — awaiting review.**
+
 ## Environment (verified)
 
 | Item | Value |
@@ -380,6 +438,10 @@ Findings that bind all later work, in one line each:
 | P2.2.6.2 | Exit-convention decision & default hardening (user-authorised): +15/−8 default, orders_12 +16/−8 via central `EXIT_POLICY`, ±30% pinned historical-only | **Done** — library default changed with historical scripts pinned; +6 tests (539 green); no artifacts touched; verdict unchanged (zero advance) |
 | P2.2.7 | Complete data-requirements & readiness audit (documentation-only): master inventory A–G, per-dataset spec, fresh coverage audit of the real files, gap/blocker analysis, readiness matrix | **Done** — 4 deliverables + STATUS/HANDOFF; sole code change is read-only helper `_p227_data_audit.py`; no download/account/provider discovery; no dataset modified; MC not implemented; suite 556 green; nothing committed — awaiting review before external-source discovery |
 | P2.2.7.1 | Data audit consistency corrections (documentation-only): raw vs usable counts (267 raw NIFTY / 265 usable / 801 candles / 795 usable / 6 empty), backtest returns [SIMULATED]/[DERIVED] (not observed market returns), India VIX distinguished from contract IV (VIX is index benchmark, not input to IV inversion; contract IV would be model-derived estimate) | **Done** — 6 docs updated + P2.2.7.1 deliverable; no code, data, or tests modified; nothing committed — awaiting review before P2.2.8 external-source discovery |
+| P2.2.8 | Free historical data source discovery (read-only research & docs): evaluated domains A–M against ₹0/no-account rules; discovered pre-2024 legacy F&O bhavcopy path, official India VIX, RBI 91d T-bills, NIFTY dividend yield, participant OI/vol; confirmed observed IV/Greeks and quotes/depth are permanent hard blockers at ₹0 | **Done** — 3 deliverables (INVENTORY, MATRIX, DECISION) + STATUS/HANDOFF; no downloads, no accounts, no code/data modified; nothing committed — awaiting review |
+| P2.2.9 | Data source permission, validation & acquisition readiness audit (read-only research & docs): audited ToS/licensing for Domains A–M; classified 4 GO-CANDIDATE, 2 DERIVED-ONLY, 7 CONDITIONAL; defined fail-closed validation plan (dual-schema UDiFF/Legacy, lot size transitions, provenance); defined Part C risk register, Part E scope boundaries, and Part F 4-tier roadmap | **Done** — 3 deliverables (PERMISSION_AUDIT, VALIDATION_PLAN, ACQUISITION_DECISION) + STATUS/HANDOFF; no downloads, no accounts, no code/data modified; nothing committed — awaiting review |
+| P2.2.9.1 | Access policy correction & two-axis reconciliation (documentation-only): incorporated owner's clarified rules (existing Google sign-in allowed, no provider accounts, ₹0 cost); established independent Two-Axis evaluation (Axis 1 Access vs Axis 2 Permission); established upstream governance inheritance for derived Domains B & G; defined 7-point Safe Acquisition Gate | **Done** — deliverable `P2.2.9.1_ACCESS_POLICY_CORRECTION.md` + reconciled P2.2.9 docs + STATUS/HANDOFF; no downloads, no code/data modified; nothing committed — awaiting review |
+| P2.2.9.2 | Technical validation specification corrections (documentation-only): audited tick size (instrument-specific reference, circulars 67135/67134, integer paise); NIFTY lot-size contract cohorts (dual lots co-existing on calendar dates, 4-tuple key, fail-closed unmapped cohorts); participant OI semantics (row-level sum check strict, aggregate long/short diagnostic); strict zero-imputation completeness taxonomy; EOD close vs 30m VWAP diagnostic treatment | **Done** — deliverable `P2.2.9.2_TECHNICAL_VALIDATION_CORRECTIONS.md` + updated `P2.2.9_TECHNICAL_VALIDATION_PLAN.md` + STATUS/HANDOFF; no downloads, no code/data modified; nothing committed — awaiting review |
 | T10 | Full-universe data fetch + 20-strategy research & validation | Outstanding |
 | T11 | Strategy applicability screening → shortlist ~5 → keep ≤3 | Outstanding |
 | — | FastAPI + DB layer + Streamlit dashboard (old plan t8 remainder) | Not started, not authorised |
