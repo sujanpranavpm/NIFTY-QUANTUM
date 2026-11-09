@@ -30,6 +30,8 @@ streamlit==1.64.0
 fastapi==0.141.1
 uvicorn==0.53.0
 SQLAlchemy==2.1.6
+# Live market-data WebSocket client (P2.2.10.2). Imported lazily: nothing else needs it.
+websockets==16.1.1
 
 # --- audit-only (re-running scripts/ data-verification; not imported by nifty_quant) ---
 curl_cffi==0.17.0

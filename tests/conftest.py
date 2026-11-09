@@ -131,12 +131,12 @@ def clock():
     return [f"2026-01-05 {h:02d}:{m:02d}:00" for h in (9, 10) for m in range(0, 60, 15)]
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Deterministic derivatives-data fixtures
 #
 # Same rule as above: every value is written out literally or derived from a rule
 # the test restates, no frame here is read from data/ or artifacts/.
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 IST = "Asia/Kolkata"
 DEFAULT_DAY = "2026-01-05"
 DEFAULT_EXPIRY = "2026-01-29"
@@ -210,18 +210,12 @@ def official_eod():
 # Deterministic bracket-signal fixtures
 #
 # ``orders_12`` attaches a +6%/-3% bracket to an SMA20-above-SMA50 cross, so the
-# 2:1 reward/risk it advertises is only observable when a cross actually lands on
-# the evaluated bar.  Waiting for the cached equity data to produce one makes the
+# 2:1 reward/risk it advertises is only observable when a cross actually lands on the
+# evaluated bar.  Waiting for the cached equity data to produce one makes the
 # test dataset-dependent (and it skipped whenever the sample happened to be flat),
 # so this series *is* the fixture: 40 falling bars, 52 bars pinned at 100, then a
 # single +0.50 tick.  That is engineered so the one and only golden cross is a
 # chosen bar - asserted in the test rather than trusted.
-#
-# The bracket's two children are submitted together with the entry but only
-# *activate* on the first entry fill, which by the next-bar rule cannot happen
-# before the bar after the cross.  So the fixture is offered in two lengths: one
-# that ends on the cross (a fresh BUY with no live exits yet) and one that appends
-# a single fill bar (a live bracket whose target and stop are readable).
 # ---------------------------------------------------------------------------
 BRACKET_SYMBOL = "BRKT"
 BRACKET_ANCHOR = 100.0
@@ -329,3 +323,16 @@ def bracket_live_signal(bracket_live_bars, bracket_validation_report):
 def bracket_run(bracket_bars):
     """The raw ``orders_12`` backtest over the fixture, for fill-level assertions."""
     return run_backtest("orders_12", bracket_bars, start=None)
+
+
+# ---------------------------------------------------------------------------
+# Ingestion isolation fixture (requested explicitly by ingestion tests)
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def ingestion_isolation(tmp_path: Path, monkeypatch):
+    """Patch _repo_root to a temporary directory for ingestion tests.
+    This fixture is not autouse; ingestion tests must request it via ``usefixtures``.
+    """
+    import importlib
+    reg = importlib.import_module("nifty_quant.ingestion.registry")
+    monkeypatch.setattr(reg, "_repo_root", lambda: tmp_path)

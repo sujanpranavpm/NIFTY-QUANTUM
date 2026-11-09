@@ -16,6 +16,10 @@ fastapi==0.141.1
 uvicorn==0.53.0
 SQLAlchemy==2.1.6
 
+# Live market-data collection (P2.2.10.2). Imported lazily by
+# nifty_quant.market_data.websocket, so the research stack still runs without it.
+websockets==16.1.1
+
 # Optional: PostgreSQL driver for the production result store.
 # pip install "psycopg[binary]"
 
